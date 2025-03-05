@@ -18,12 +18,7 @@ a,
   }
 }
 
-@media (min-width: 1024px) {
-  body {
-    display: flex;
-    place-items: center;
-  }
-
+@media (min-width: 1024px) {  
   #app {
     padding: 2em;
   }

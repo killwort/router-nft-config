@@ -1,87 +1,90 @@
 ﻿<template>
+  <label><input type="checkbox" v-model="showOffline"/> Показать известные устройства не в сети</label>
+  <label><input type="checkbox" v-model="showHidden"/> Показать не блокируемые устройства</label>
   <ul :class="$style.devices">
-    <li v-for="arpItem in arpCache.items" :key="arpItem.ip" 
+    <li v-for="arpItem in arpCache.items" :key="arpItem.ip"
         :class="(arpItem.l3Blocks||arpItem.l2Blocks)?$style.hardBlock:arpItem.dnsBlocks?$style.softBlock:$style.noBlock">
-      <h3 v-if="arpItem.knownDevice"><strong>{{ arpItem.knownDevice.name }}</strong></h3>
-      <template v-else>
-        {{ arpItem.mac }}
-      </template>
       <div :class="$style[arpItem.knownDevice?.class||'_9_unknown']"></div>
-      <p v-if="arpItem.ip">{{ arpItem.ip }}</p>
-      <p v-else>Не в сети</p>
-      <template v-if="!arpItem.knownDevice">
+      <h3 :class="$style.name">
+        <strong v-if="arpItem.knownDevice">{{ arpItem.knownDevice.name }}</strong>
+        <template v-else>
+          {{ arpItem.mac }}
+        </template>
+      </h3>
+      <p :class="$style.address">
+        <template v-if="arpItem.ip">{{ arpItem.ip }}</template>
+        <template v-else>Не в сети</template>
+      </p>
+      <div :class="$style.leases" v-if="!arpItem.knownDevice">
         <p v-for="lease in arpItem.leases">{{ lease.host }} = {{ lease.dclass }}</p>
-      </template>
-      <div :class="$style.filler"></div>
-      <div :class="$style.buttons">
-        <label>YouTube 
+      </div>
+      <div :class="$style.buttons1" v-if="!arpItem.knownDevice?.noBlock">
+        <label>YouTube
           <button v-if="arpItem.dnsBlocks" :class="$style.enableButton" @click="exemptDns(arpItem)"></button>
           <button v-else :class="$style.disableButton" @click="blockDns(arpItem)"></button>
         </label>
-        <template v-if="!arpItem.knownDevice?.noBlock">
-          <template v-if="arpItem.ip && false">
-            <button v-if="arpItem.l3Blocks" :class="$style.enableButton" @click="unblockL3(arpItem)">
-            </button>
-            <button v-else :class="$style.disableButton" @click="blockL3(arpItem)"></button>
-          </template>
-          <label>
-            Интернет
+      </div>
+      <div :class="$style.buttons2" v-if="!arpItem.knownDevice?.noBlock">
+        <label>
+          Интернет
           <button v-if="arpItem.l2Blocks" :class="$style.enableButton" @click="unblockL2(arpItem)">
           </button>
           <button v-else :class="$style.disableButton" @click="blockL2(arpItem)"></button>
-          </label>
-        </template>
+        </label>
       </div>
     </li>
   </ul>
 </template>
 
 <script setup>
-import {reactive, ref} from "vue";
-
-let arpCache = reactive({items: await reload()});
-const showHidden = ref(false);
-
-async function exemptDns(arpRecord) {
-  //await fetch(conf.server + 'add-dns-exempt?' + arpRecord.mac);
-  await fetch(conf.server+'add-to-set?dnsunblock/'+arpRecord.mac);
-  arpCache.items = await reload();
-}
-
-async function blockDns(arpRecord) {
-  //await Promise.all(arpRecord.relatedPortRedirects.map(r => fetch(conf.server + 'delete-rule?' + r.table + '/' + r.chain + '/' + r.handle)));
-  await fetch(conf.server+'remove-from-set?dnsunblock/'+arpRecord.mac);
-  arpCache.items = await reload();
-}
-
-async function blockL2(arpRecord) {
-  await fetch(conf.server+'add-to-set?macblock/'+arpRecord.mac);
-  await fetch(conf.server+'add-to-set?ipblock/'+arpRecord.ip);
-  arpCache.items = await reload();
-}
-
-async function blockL3(arpRecord) {
-  await fetch(conf.server+'add-to-set?ipblock/'+arpRecord.ip);
-  arpCache.items = await reload();
-}
-
-async function unblockL2(arpRecord) {
-  await fetch(conf.server+'remove-from-set?macblock/'+arpRecord.mac);
-  await fetch(conf.server+'remove-from-set?ipblock/'+arpRecord.ip);
-  arpCache.items = await reload();
-}
-
-async function unblockL3(arpRecord) {
-  await fetch(conf.server+'remove-from-set?ipblock/'+arpRecord.ip);
-  arpCache.items = await reload();
-}
-</script>
-<script>
 import conf from "./config.json";
 import groupBy from "lodash/groupBy";
 import uniqBy from "lodash/uniqBy";
 import flatMap from "lodash/flatMap";
 import some from "lodash/some";
+import {reactive, ref, watch} from "vue";
+
+const showHidden = ref(false);
+const showOffline = ref(false);
+let arpCache = reactive({items: await reload()});
+
+
+watch(showHidden, async () => arpCache.items = await reload());
+watch(showOffline, async () => arpCache.items = await reload());
+
+async function exemptDns(arpRecord) {
+  //await fetch(conf.server + 'add-dns-exempt?' + arpRecord.mac);
+  await fetch(conf.server + 'add-to-set?dnsunblock/' + arpRecord.mac);
+  arpCache.items = await reload();
+}
+
+async function blockDns(arpRecord) {
+  //await Promise.all(arpRecord.relatedPortRedirects.map(r => fetch(conf.server + 'delete-rule?' + r.table + '/' + r.chain + '/' + r.handle)));
+  await fetch(conf.server + 'remove-from-set?dnsunblock/' + arpRecord.mac);
+  arpCache.items = await reload();
+}
+
+async function blockL2(arpRecord) {
+  await fetch(conf.server + 'add-to-set?macblock/' + arpRecord.mac);
+  await fetch(conf.server + 'add-to-set?ipblock/' + arpRecord.ip);
+  arpCache.items = await reload();
+}
+
+async function blockL3(arpRecord) {
+  await fetch(conf.server + 'add-to-set?ipblock/' + arpRecord.ip);
+  arpCache.items = await reload();
+}
+
+async function unblockL2(arpRecord) {
+  await fetch(conf.server + 'remove-from-set?macblock/' + arpRecord.mac);
+  await fetch(conf.server + 'remove-from-set?ipblock/' + arpRecord.ip);
+  arpCache.items = await reload();
+}
+
+async function unblockL3(arpRecord) {
+  await fetch(conf.server + 'remove-from-set?ipblock/' + arpRecord.ip);
+  arpCache.items = await reload();
+}
 
 async function reload() {
   const [arpCache, leases, ruleset] = await Promise.all([
@@ -104,8 +107,10 @@ async function reload() {
         allChains.push(item.chain);
     } else if (item.rule) {
       tables[item.rule.table].chains[item.rule.chain].rules.push(item.rule);
-    } else if(item.set){
-      if(!item.set.elem){ item.set.elem=[];}
+    } else if (item.set) {
+      if (!item.set.elem) {
+        item.set.elem = [];
+      }
       tables[item.set.table].sets[item.set.name] = item.set;
     }
   });
@@ -120,9 +125,9 @@ async function reload() {
     arpCache[i].knownDevice = conf.knownDevices[arpCache[i].mac];
     arpCache[i].relatedPortRedirects = flatMap((tablesByType.nat || []).filter(c => c.hook == 'prerouting'), c => c.rules).filter(isRelated(arpCache[i]));
     arpCache[i].relatedFilters = flatMap((tablesByType.filter || []).filter(c => c.hook == 'input' || c.hook == 'output' || c.hook == 'forward'), c => c.rules).filter(isRelated(arpCache[i]));
-    arpCache[i].dnsBlocks = tables.nat.sets.dnsunblock?.elem.indexOf(arpCache[i].mac)==-1;
-    arpCache[i].l3Blocks = tables.nat.sets.ipblock?.elem.indexOf(arpCache[i].ip)!==-1;
-    arpCache[i].l2Blocks = tables.nat.sets.macblock?.elem.indexOf(arpCache[i].mac)!==-1;
+    arpCache[i].dnsBlocks = tables.nat.sets.dnsunblock?.elem.indexOf(arpCache[i].mac) == -1;
+    arpCache[i].l3Blocks = tables.nat.sets.ipblock?.elem.indexOf(arpCache[i].ip) !== -1;
+    arpCache[i].l2Blocks = tables.nat.sets.macblock?.elem.indexOf(arpCache[i].mac) !== -1;
   }
   arpCache.sort((a, b) => {
     if (a.knownDevice && b.knownDevice) {
@@ -133,8 +138,8 @@ async function reload() {
     if (a.knownDevice) return -1;
     if (b.knownDevice) return 1;
     return (a.host || '').localeCompare(b.host);
-  })
-  return arpCache.filter(x=>!x.knownDevice?.noBlock);
+  });
+  return arpCache.filter(x => (showHidden.value || !x.knownDevice?.noBlock) && (showOffline.value || x.ip || (!x.dnsBlocks || x.l2Blocks || x.l3Blocks)));
 }
 
 function isL2Expr(expr) {
@@ -171,31 +176,66 @@ function parseArp(src) {
     };
   }).filter(x => !!x.ip);
 }
-
-
 </script>
 
 <style module>
 .devices {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   padding: 0;
   list-style: none;
   width: 100%;
+  grid-template-columns: repeat(1, 1fr);
 }
 
+@media (min-width: 750px) {
+  .devices {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1250px) {
+  .devices {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1750px) {
+  .devices {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (min-width: 2250px) {
+  .devices {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+
 .devices > li {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-areas: "i n b1" "i a b2" ". l .";
   padding: 1em;
   margin: 2px;
   border: 1px solid #ccc;
-  flex: 0 0 260px;
-  text-align: center;
+  flex: 0 0 auto;
   border-radius: 3px;
+  grid-template-columns: max-content 1fr 90px;
 }
 
-.filler{
+.name {
+  grid-area: n;
+}
+
+.address {
+  grid-area: a;
+}
+
+.leases {
+  grid-area: l;
+}
+
+.filler {
   flex: 1 1 auto;
 }
 
@@ -212,11 +252,12 @@ function parseArp(src) {
 }
 
 .devicon {
+  grid-area: i;
   font-size: 48px;
   display: block;
   width: 48px;
   height: 48px;
-  margin: 0.33em auto;
+  margin: 0.33em 1em 0.33em 0;
   background-size: 48px 48px;
   background-position: center center;
   background-repeat: no-repeat;
@@ -258,15 +299,28 @@ function parseArp(src) {
 }
 
 .buttons {
+  grid-area: b;
   display: flex;
-  margin: 1em 0 0 0;
+  text-align: center;
+  margin: 0 0 0 0;
+}
+
+.buttons1 {
+  composes: buttons;
+  grid-area: b1;
+}
+
+.buttons2 {
+  composes: buttons;
+  grid-area: b2;
 }
 
 .buttons > * {
   display: block;
   flex: 1 1 auto;
 }
-.switchButton{
+
+.switchButton {
   outline: none;
   border: 1px solid #070;
   margin: 1px;
@@ -275,34 +329,38 @@ function parseArp(src) {
   height: 20px;
   display: block;
   margin: 0 auto;
-  transition: all ease .33s;  
+  transition: all ease .33s;
   position: relative;
 }
-.switchButton:after{
-  content:'ВЫКЛ      ВКЛ';
+
+.switchButton:after {
+  content: 'ВЫКЛ      ВКЛ';
   display: block;
   margin: 0 -10px 0 -41px;
   color: gray;
 }
-.switchButton:before{
+
+.switchButton:before {
   content: ' ';
   display: block;
   border-radius: 35px;
   width: 16px;
   height: 16px;
-  background: rgba(255,255,255,.6);
+  background: rgba(255, 255, 255, .6);
   border: 1px solid black;
   position: absolute;
-  transition: all ease .33s;  
+  transition: all ease .33s;
   top: 1px;
 }
+
 .enableButton {
   composes: switchButton;
   color: #f00;
   background-color: #500;
   border-color: #700;
 }
-.enableButton:before{
+
+.enableButton:before {
   left: 1px;
 }
 
@@ -312,13 +370,8 @@ function parseArp(src) {
   background-color: #050;
   border-color: #070;
 }
-.disableButton:before{
-  left: 16px;
-}
 
-@media(max-width: 600px){
-  .devices{
-    flex-direction: column;
-  }
+.disableButton:before {
+  left: 16px;
 }
 </style>
