@@ -1,0 +1,90 @@
+﻿{
+  "server": "http://10.132.35.254/cgi-bin/",
+  "knownDevices": {
+    "18:1d:ea:4b:68:ba": {
+      "name": "Ноутбук",
+      "class": "_2_laptop"
+    },
+    "74:d0:2b:96:1f:fa": {
+      "name": "Комп Вася",
+      "class": "_2_pc"
+    },
+    "c0:25:a5:ab:a6:a7": {
+      "name": "Комп Натуля",
+      "class": "_2_pc"
+    },
+    "d4:5d:64:26:59:a3": {
+      "name": "Комп Андрей",
+      "noBlock": true,
+      "class": "_2_pc"
+    },
+    "72:2b:2f:bb:79:7c": {
+      "name": "Телефон Ксюша",
+      "class": "_1_phone"
+    },
+    "02:b4:a7:14:83:78": {
+      "name": "Телефон Андрей",
+      "noBlock": true,
+      "class": "_1_phone"
+    },
+    "48:9e:bd:c9:9d:42": {
+      "name": "Принтер",
+      "noBlock": true,
+      "class": "_9_printer"
+    },
+    "28:ee:52:a9:fd:42": {
+      "name": "Точка доступа P9/1",
+      "noBlock": true,
+      "class": "_9_netdev"
+    },
+    "28:ee:52:aa:00:36": {
+      "name": "Точка доступа P9/2",
+      "noBlock": true,
+      "class": "_9_netdev"
+    },
+    "28:ee:52:a9:73:30": {
+      "name": "Точка доступа P9/3",
+      "noBlock": true,
+      "class": "_9_netdev"
+    },
+    "90:9a:4a:9a:c2:96": {
+      "name": "Точка доступа наружная",
+      "noBlock": true,
+      "class": "_9_netdev"
+    },
+    "5c:a6:e6:9e:21:00": {
+      "name": "Точка доступа на терассе",
+      "noBlock": true,
+      "class": "_9_netdev"
+    },
+    "cc:d3:c1:b3:af:a4": {
+      "name": "Телевизор нижний провод",
+      "class": "_9_tv"
+    },
+    "00:08:22:a5:22:2d": {
+      "name": "Планшет Андрей",
+      "class": "_1_phone"
+    },
+    "7c:46:85:59:4c:d6": {
+      "name": "Планшет",
+      "class": "_1_phone"
+    },
+    "14:99:e2:d9:45:01": {
+      "name": "iPad",
+      "class": "_1_phone"
+    },
+    "c8:51:42:cc:d7:cc": {
+      "name": "iТелефон Андрей",
+      "class": "_1_phone"
+    },
+    "64:bc:0c:66:ff:7c": {
+      "name": "Колонка наверху",
+      "noBlock": true,
+      "class": "_9_netdev"
+    },
+    "54:df:1b:67:13:27": {
+      "name": "Телевизор верхний",
+      "class": "_9_tv"
+    }
+  }
+}
