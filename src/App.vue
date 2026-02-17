@@ -1,15 +1,19 @@
 <script setup>
 import NftState from "./NftState.vue";
-import {ref} from "vue";
+import {ref, watch} from "vue";
+import AppState from "@/AppState.vue";
 
-const mode = ref('NftState')
-const modes = {NftState};
+const mode = ref(localStorage.getItem('mode')||'NftState')
+const modes = {NftState, AppState};
+
+watch(mode, s=>localStorage.setItem('mode',s));
 </script>
 
 <template>
   <div :class="$style.layout">
     <div :class="$style.navbar">
-      <button @click="mode='NftState'">State/control</button>
+      <button @click="mode='NftState'">Правила хостов</button>
+      <button @click="mode='AppState'">Правила приложений</button>
     </div>
     <div :class="$style.content">
       <Suspense>

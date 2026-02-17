@@ -12,7 +12,7 @@
         </template>
       </h3>
       <p :class="$style.address">
-        <template v-if="arpItem.ip">{{ arpItem.ip }}</template>
+        <template v-if="arpItem.ip"><span v-for="ip in arpItem.ip">{{ ip }}</span></template>
         <template v-else>Не в сети</template>
       </p>
       <div :class="$style.leases" v-if="!arpItem.knownDevice">
@@ -66,23 +66,25 @@ async function blockDns(arpRecord) {
 
 async function blockL2(arpRecord) {
   await fetch(conf.server + 'add-to-set?macblock/' + arpRecord.mac);
-  await fetch(conf.server + 'add-to-set?ipblock/' + arpRecord.ip);
+  await Promise.all(arpRecord.ip.map(ip => fetch(conf.server + 'add-to-set?ipblock/' + ip)));
   arpCache.items = await reload();
 }
 
 async function blockL3(arpRecord) {
   await fetch(conf.server + 'add-to-set?ipblock/' + arpRecord.ip);
+  await Promise.all(arpRecord.ip.map(ip => fetch(conf.server + 'add-to-set?ipblock/' + ip)));
   arpCache.items = await reload();
 }
 
 async function unblockL2(arpRecord) {
   await fetch(conf.server + 'remove-from-set?macblock/' + arpRecord.mac);
-  await fetch(conf.server + 'remove-from-set?ipblock/' + arpRecord.ip);
+  await Promise.all(arpRecord.ip.map(ip => fetch(conf.server + 'remove-from-set?ipblock/' + ip)));
   arpCache.items = await reload();
 }
 
 async function unblockL3(arpRecord) {
   await fetch(conf.server + 'remove-from-set?ipblock/' + arpRecord.ip);
+  await Promise.all(arpRecord.ip.map(ip => fetch(conf.server + 'remove-from-set?ipblock/' + ip)));
   arpCache.items = await reload();
 }
 
@@ -126,7 +128,7 @@ async function reload() {
     arpCache[i].relatedPortRedirects = flatMap((tablesByType.nat || []).filter(c => c.hook == 'prerouting'), c => c.rules).filter(isRelated(arpCache[i]));
     arpCache[i].relatedFilters = flatMap((tablesByType.filter || []).filter(c => c.hook == 'input' || c.hook == 'output' || c.hook == 'forward'), c => c.rules).filter(isRelated(arpCache[i]));
     arpCache[i].dnsBlocks = tables.nat.sets.dnsunblock?.elem.indexOf(arpCache[i].mac) == -1;
-    arpCache[i].l3Blocks = tables.nat.sets.ipblock?.elem.indexOf(arpCache[i].ip) !== -1;
+    arpCache[i].l3Blocks = !!tables.nat.sets.ipblock?.elem.find(b => arpCache[i].ip.indexOf(b) !== -1);
     arpCache[i].l2Blocks = tables.nat.sets.macblock?.elem.indexOf(arpCache[i].mac) !== -1;
   }
   arpCache.sort((a, b) => {
@@ -139,7 +141,7 @@ async function reload() {
     if (b.knownDevice) return 1;
     return (a.host || '').localeCompare(b.host);
   });
-  return arpCache.filter(x => (showHidden.value || !x.knownDevice?.noBlock) && (showOffline.value || x.ip || (!x.dnsBlocks || x.l2Blocks || x.l3Blocks)));
+  return arpCache.filter(x => (showHidden.value || !x.knownDevice?.noBlock) && (showOffline.value || x.ip.length || (!x.dnsBlocks || x.l2Blocks || x.l3Blocks)));
 }
 
 function isL2Expr(expr) {
@@ -159,7 +161,7 @@ function isRelated(arpRec) {
               return (expr.match.right == arpRec.mac && expr.match.op == '==') || (expr.match.right != arpRec.mac && expr.match.op == '!=')
               break;
             case 'ip':
-              return (expr.match.right == arpRec.ip && expr.match.op == '==') || (expr.match.right != arpRec.ip && expr.match.op == '!=')
+              return (arpRec.ip.indexOf(expr.match.right) !== -1 && expr.match.op == '==') || (arpRec.ip.indexOf(expr.match.right) === -1 && expr.match.op == '!=')
               break;
           }
         }
@@ -168,13 +170,26 @@ function isRelated(arpRec) {
 }
 
 function parseArp(src) {
-  return src.split('\n').map(l => {
+  var list = src.split('\n').map(l => {
     const parts = l.replace(/\s+/, ' ').split(' ');
     return {
-      ip: parts[0],
+      ip: [parts[0]],
       mac: parts[4]
     };
-  }).filter(x => !!x.ip);
+  }).filter(x => !!x.ip && !!x.mac);
+  var rv = {};
+  for (var i of list) {
+    if (rv[i.mac]) {
+      if (i.ip.length)
+        rv[i.mac].ip.push(i.ip[0])
+    } else
+      rv[i.mac] = i;
+  }
+  list = [];
+  for (var i in rv) {
+    list.push(rv[i]);
+  }
+  return list;
 }
 </script>
 
