@@ -1,0 +1,36 @@
+#!/bin/bash
+echo "Content-Type: application/json"
+echo "Access-Control-Allow-Origin: *"
+echo
+echo \[
+
+INSIDE_LEASE=no
+while IFS= read -r line
+do
+	if [ "$INSIDE_LEASE" == "no" ]; then
+		if [[ "$line" == lease* ]]; then
+			LEASE_IP=${line##lease }
+			LEASE_IP=${LEASE_IP%% \{}
+			LEASE_MAC=
+			LEASE_CLASS=
+			LEASE_HOST=
+			INSIDE_LEASE=yes
+		fi
+	else
+		if [[ "$line" == "}" ]]; then
+			echo "{ \"ip\": \"$LEASE_IP\", \"mac\": \"$LEASE_MAC\", \"dclass\":\"${LEASE_CLASS//[\\\"]/\\\\/g}\", \"host\": \"${LEASE_HOST//[\\\"]/\\\\/g}\"},"
+			INSIDE_LEASE=no
+		elif [[ "$line" =~ hardware ]]; then
+			LEASE_MAC=${line##*ethernet }
+			LEASE_MAC=${LEASE_MAC%;}
+		elif [[ "$line" =~ client-hostname ]]; then
+			LEASE_HOST=${line##*hostname \"}
+			LEASE_HOST=${LEASE_HOST%\";}
+		elif [[ "$line" =~ vendor-class-identifier ]]; then
+			LEASE_CLASS=${line##*=}
+			LEASE_CLASS=${LEASE_CLASS#* \"}
+			LEASE_CLASS=${LEASE_CLASS%\";}
+		fi
+	fi
+done < "/var/lib/dhcp/dhcpd.leases"
+echo 'null]'

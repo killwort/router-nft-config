@@ -1,0 +1,47 @@
+
+.devicon {
+    grid-area: i;
+    font-size: 48px;
+    display: block;
+    width: 48px;
+    height: 48px;
+    margin: 0.33em 1em 0.33em 0;
+    background-size: 48px 48px;
+    background-position: center center;
+    background-repeat: no-repeat;
+}
+
+._1_phone {
+    composes: devicon;
+    background-image: url('assets/_1_phone.svg');
+}
+
+._9_tv {
+    composes: devicon;
+    background-image: url('assets/_9_tv.svg');
+}
+
+._2_laptop {
+    composes: devicon;
+    background-image: url('assets/_2_laptop.svg');
+}
+
+._2_pc {
+    composes: devicon;
+    background-image: url('assets/_2_pc.svg');
+}
+
+._9_printer {
+    composes: devicon;
+    background-image: url('assets/_9_printer.svg');
+}
+
+._9_netdev {
+    composes: devicon;
+    background-image: url('assets/_9_netdev.svg');
+}
+
+._9_unknown {
+    composes: devicon;
+    background-image: url('assets/_9_unknown.svg');
+}

@@ -1,0 +1,14 @@
+#!/bin/bash
+
+/usr/lib/cgi-bin/dnsblock deadbydaylight.conf x
+/usr/lib/cgi-bin/dnsblock discord.conf x
+/usr/lib/cgi-bin/dnsblock fortnite.conf x
+/usr/lib/cgi-bin/dnsblock roblox.conf x
+/usr/lib/cgi-bin/dnsblock steam.conf x
+/usr/lib/cgi-bin/dnsblock tiktok.conf x
+/usr/lib/cgi-bin/dnsblock tnt-online.conf x
+/usr/lib/cgi-bin/dnsblock vpn.conf x
+/usr/lib/cgi-bin/dnsblock yandexvideo.conf x
+/usr/lib/cgi-bin/dnsblock youtube.conf x
+sudo systemctl restart unbound
+

@@ -1,0 +1,18 @@
+#!/bin/bash
+echo "Content-Type: text/plain"
+echo "Access-Control-Allow-Origin: *"
+echo
+
+
+/usr/lib/cgi-bin/dnsunblock deadbydaylight.conf x
+/usr/lib/cgi-bin/dnsunblock discord.conf x
+/usr/lib/cgi-bin/dnsunblock fortnite.conf x
+/usr/lib/cgi-bin/dnsunblock roblox.conf x
+/usr/lib/cgi-bin/dnsunblock steam.conf x
+/usr/lib/cgi-bin/dnsunblock tiktok.conf x
+/usr/lib/cgi-bin/dnsunblock tnt-online.conf x
+/usr/lib/cgi-bin/dnsunblock vpn.conf x
+/usr/lib/cgi-bin/dnsunblock yandexvideo.conf x
+/usr/lib/cgi-bin/dnsunblock youtube.conf x
+sudo systemctl restart unbound
+

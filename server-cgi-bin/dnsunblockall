@@ -1,0 +1,7 @@
+#!/bin/bash
+echo "Content-Type: text/plain"
+echo "Access-Control-Allow-Origin: *"
+echo
+
+sudo rm /etc/unbound/unbound-block-all.conf.d/$1
+sudo /usr/bin/systemctl restart unbound unbound-secondary

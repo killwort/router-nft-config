@@ -1,15 +1,31 @@
 ﻿<template>
+  <EditHost v-if="editedHost" :host="editedHost" @close="closeEditor"/>
   <label><input type="checkbox" v-model="showOffline"/> Показать известные устройства не в сети</label>
   <label><input type="checkbox" v-model="showHidden"/> Показать не блокируемые устройства</label>
+  <div style="display:none">
+    <span :class="devicons._1_phone"></span>
+    <span :class="devicons._9_tv"></span>
+    <span :class="devicons._2_laptop"></span>
+    <span :class="devicons._2_pc"></span>
+    <span :class="devicons._9_printer"></span>
+    <span :class="devicons._9_netdev"></span>
+    <span :class="devicons._9_unknown"></span>
+  </div>
   <ul :class="$style.devices">
     <li v-for="arpItem in arpCache.items" :key="arpItem.ip"
-        :class="(arpItem.l3Blocks||arpItem.l2Blocks)?$style.hardBlock:arpItem.dnsBlocks?$style.softBlock:$style.noBlock">
-      <div :class="$style[arpItem.knownDevice?.class||'_9_unknown']"></div>
+        :class="(arpItem.l3Blocks||arpItem.schduleExclusion)?$style.hardBlock:arpItem.dnsBlocks?$style.softBlock:$style.noBlock">
+      <div :class="devicons[arpItem.knownDevice?.class||'_9_unknown']"></div>
       <h3 :class="$style.name">
-        <strong v-if="arpItem.knownDevice">{{ arpItem.knownDevice.name }}</strong>
+        <template v-if="arpItem.knownDevice">
+        <strong >
+          {{ arpItem.knownDevice.name }}
+        </strong>
+          <span v-for="g in arpItem.knownDevice.groups" :key="g" :class="$style.group">{{g}}</span>
+        </template>
         <template v-else>
           {{ arpItem.mac }}
         </template>
+        <button :class="$style.editButton" @click="editHost(arpItem)">✎</button>
       </h3>
       <p :class="$style.address">
         <template v-if="arpItem.ip"><span v-for="ip in arpItem.ip">{{ ip }}</span></template>
@@ -26,10 +42,10 @@
       </div>
       <div :class="$style.buttons2" v-if="!arpItem.knownDevice?.noBlock">
         <label>
-          Интернет
-          <button v-if="arpItem.l2Blocks" :class="$style.enableButton" @click="unblockL2(arpItem)">
+          Исключение
+          <button v-if="arpItem.schduleExclusion" :class="$style.disableButton" @click="removeExclusion(arpItem)">
           </button>
-          <button v-else :class="$style.disableButton" @click="blockL2(arpItem)"></button>
+          <button v-else :class="$style.enableButton" @click="addExclusion(arpItem)"></button>
         </label>
       </div>
     </li>
@@ -37,20 +53,28 @@
 </template>
 
 <script setup>
-import conf from "./config.json";
+import conf from "@/config";
 import groupBy from "lodash/groupBy";
 import uniqBy from "lodash/uniqBy";
 import flatMap from "lodash/flatMap";
 import some from "lodash/some";
 import {reactive, ref, watch} from "vue";
+import EditHost from "@/EditHost.vue";
 
 const showHidden = ref(false);
 const showOffline = ref(false);
+const editedHost = ref(null);
 let arpCache = reactive({items: await reload()});
 
 
 watch(showHidden, async () => arpCache.items = await reload());
 watch(showOffline, async () => arpCache.items = await reload());
+
+async function closeEditor(v) {
+  if (v === true)
+    arpCache.items = await reload();
+  editedHost.value = null;
+}
 
 async function exemptDns(arpRecord) {
   //await fetch(conf.server + 'add-dns-exempt?' + arpRecord.mac);
@@ -82,10 +106,26 @@ async function unblockL2(arpRecord) {
   arpCache.items = await reload();
 }
 
+async function addExclusion(arpRecord) {
+  await fetch(conf.server + 'add-to-set?schedule_exclusions/' + arpRecord.mac);
+  //await Promise.all(arpRecord.ip.map(ip => fetch(conf.server + 'remove-from-set?ipblock/' + ip)));
+  arpCache.items = await reload();
+}
+
+async function removeExclusion(arpRecord) {
+  await fetch(conf.server + 'remove-from-set?schedule_exclusions/' + arpRecord.mac);
+  //await Promise.all(arpRecord.ip.map(ip => fetch(conf.server + 'remove-from-set?ipblock/' + ip)));
+  arpCache.items = await reload();
+}
+
 async function unblockL3(arpRecord) {
   await fetch(conf.server + 'remove-from-set?ipblock/' + arpRecord.ip);
   await Promise.all(arpRecord.ip.map(ip => fetch(conf.server + 'remove-from-set?ipblock/' + ip)));
   arpCache.items = await reload();
+}
+
+function editHost(arpRecord) {
+  editedHost.value = arpRecord;
 }
 
 async function reload() {
@@ -117,19 +157,21 @@ async function reload() {
     }
   });
   const tablesByType = groupBy(allChains, c => c.type);
-  Object.keys(conf.knownDevices).filter(kd => !some(arpCache, i => i.mac == kd)).forEach(kd => arpCache.push({
+  const config = await conf.load();
+  Object.keys(config.knownDevices).filter(kd => !some(arpCache, i => i.mac == kd)).forEach(kd => arpCache.push({
     ip: '',
     mac: kd
   }));
 
   for (var i = 0; i < arpCache.length; i++) {
     arpCache[i].leases = uniqBy(leases.filter(l => l != null && (l.host || l.dclass) && l.mac === arpCache[i].mac), l => l.host + l.dclass);
-    arpCache[i].knownDevice = conf.knownDevices[arpCache[i].mac];
+    arpCache[i].knownDevice = config.knownDevices[arpCache[i].mac];
     arpCache[i].relatedPortRedirects = flatMap((tablesByType.nat || []).filter(c => c.hook == 'prerouting'), c => c.rules).filter(isRelated(arpCache[i]));
     arpCache[i].relatedFilters = flatMap((tablesByType.filter || []).filter(c => c.hook == 'input' || c.hook == 'output' || c.hook == 'forward'), c => c.rules).filter(isRelated(arpCache[i]));
     arpCache[i].dnsBlocks = tables.nat.sets.dnsunblock?.elem.indexOf(arpCache[i].mac) == -1;
     arpCache[i].l3Blocks = !!tables.nat.sets.ipblock?.elem.find(b => arpCache[i].ip.indexOf(b) !== -1);
     arpCache[i].l2Blocks = tables.nat.sets.macblock?.elem.indexOf(arpCache[i].mac) !== -1;
+    arpCache[i].schduleExclusion = tables.filter.sets.schedule_exclusions?.elem.indexOf(arpCache[i].mac) !== -1;
   }
   arpCache.sort((a, b) => {
     if (a.knownDevice && b.knownDevice) {
@@ -141,7 +183,7 @@ async function reload() {
     if (b.knownDevice) return 1;
     return (a.host || '').localeCompare(b.host);
   });
-  return arpCache.filter(x => (showHidden.value || !x.knownDevice?.noBlock) && (showOffline.value || x.ip.length || (!x.dnsBlocks || x.l2Blocks || x.l3Blocks)));
+  return arpCache.filter(x => (showHidden.value || !x.knownDevice?.noBlock) && (showOffline.value || x.ip.length || (!x.dnsBlocks || x.schduleExclusion || x.l3Blocks)));
 }
 
 function isL2Expr(expr) {
@@ -192,7 +234,7 @@ function parseArp(src) {
   return list;
 }
 </script>
-
+<style module="devicons" src="./devicons.css" />
 <style module>
 .devices {
   display: grid;
@@ -264,53 +306,6 @@ function parseArp(src) {
 
 .noBlock {
   background: rgba(128, 128, 0, .5);
-}
-
-.devicon {
-  grid-area: i;
-  font-size: 48px;
-  display: block;
-  width: 48px;
-  height: 48px;
-  margin: 0.33em 1em 0.33em 0;
-  background-size: 48px 48px;
-  background-position: center center;
-  background-repeat: no-repeat;
-}
-
-._1_phone {
-  composes: devicon;
-  background-image: url('assets/_1_phone.svg');
-}
-
-._9_tv {
-  composes: devicon;
-  background-image: url('assets/_9_tv.svg');
-}
-
-._2_laptop {
-  composes: devicon;
-  background-image: url('assets/_2_laptop.svg');
-}
-
-._2_pc {
-  composes: devicon;
-  background-image: url('assets/_2_pc.svg');
-}
-
-._9_printer {
-  composes: devicon;
-  background-image: url('assets/_9_printer.svg');
-}
-
-._9_netdev {
-  composes: devicon;
-  background-image: url('assets/_9_netdev.svg');
-}
-
-._9_unknown {
-  composes: devicon;
-  background-image: url('assets/_9_unknown.svg');
 }
 
 .buttons {
@@ -388,5 +383,16 @@ function parseArp(src) {
 
 .disableButton:before {
   left: 16px;
+}
+
+.editButton {
+  margin-left: 1em;
+}
+.group{
+  display: inline-block;
+  background: #ccc;
+  border-radius: 4px;
+  padding: .125em .25em;
+  margin: .125em;
 }
 </style>

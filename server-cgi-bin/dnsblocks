@@ -1,0 +1,10 @@
+#!/bin/bash
+echo "Content-Type: text/plain"
+echo "Access-Control-Allow-Origin: *"
+echo
+
+ls /etc/unbound/blocks/
+echo ------
+ls /etc/unbound/unbound-block.conf.d/
+echo ------
+ls /etc/unbound/unbound-block-all.conf.d/

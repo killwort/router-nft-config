@@ -1,0 +1,7 @@
+#!/bin/bash
+echo "Content-Type: text/plain"
+echo "Access-Control-Allow-Origin: *"
+echo
+
+IFS='/'; qargs=($QUERY_STRING); unset IFS;
+sudo conntrack -L -n --src "${qargs[0]}"

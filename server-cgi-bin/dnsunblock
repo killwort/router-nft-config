@@ -1,0 +1,9 @@
+#!/bin/bash
+echo "Content-Type: text/plain"
+echo "Access-Control-Allow-Origin: *"
+echo
+
+sudo rm /etc/unbound/unbound-block.conf.d/$1
+if [ "$2" == "" ]; then
+    sudo systemctl restart unbound
+fi

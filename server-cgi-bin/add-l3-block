@@ -1,0 +1,35 @@
+#!/bin/bash
+echo "Content-Type: text/plain"
+echo "Access-Control-Allow-Origin: *"
+echo
+
+block_ip () {
+	sudo nft add rule filter input ip saddr == $1 counter name by_ip_in drop
+	sudo nft add rule filter output ip daddr == $1 counter name by_ip_out drop
+	sudo nft add rule filter forward ip saddr == $1 counter name by_ip_fw_in drop
+	sudo nft add rule filter forward ip daddr == $1 counter name by_ip_fw_out drop
+}
+block_mac () {
+	sudo nft add rule filter input ether saddr == $1 counter name by_mac_in1 drop
+	sudo nft add rule filter input iif br0 ether saddr == $1 counter name by_mac_in2 drop
+	sudo nft add rule filter input iif enp2s0 ether  saddr == $1 counter name by_mac_in3 drop
+	sudo nft add rule filter input ether daddr == $1 counter name by_mac_out drop
+}
+
+sudo nft add table ip filter
+sudo nft add chain ip filter input \{ type filter hook input priority 0\; policy accept\; \}
+sudo nft add chain ip filter output \{ type filter hook output priority 0\; policy accept\; \}
+sudo nft add chain ip filter forward \{ type filter hook forward priority 0\; policy accept\; \}
+
+sudo nft add counter ip filter by_ip_in
+sudo nft add counter ip filter by_ip_out
+sudo nft add counter ip filter by_ip_fw_in
+sudo nft add counter ip filter by_ip_fw_out
+
+sudo nft add counter ip filter by_mac_in1
+sudo nft add counter ip filter by_mac_in2
+sudo nft add counter ip filter by_mac_in3
+sudo nft add counter ip filter by_mac_out
+
+block_ip $QUERY_STRING
+sudo nft list ruleset | grep -v tun > /etc/nftables.conf

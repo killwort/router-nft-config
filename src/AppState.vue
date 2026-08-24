@@ -1,6 +1,6 @@
 <script setup>
 import {ref} from "vue";
-import conf from '@/config.json';
+import conf from '@/config';
 
 var blocks = ref(await loadBlocks());
 
@@ -24,19 +24,22 @@ async function loadBlocks() {
 }
 
 async function enable(app) {
-  await fetch(conf.server + 'dnsunblock?'+app.app);  
+  await fetch(conf.server + 'dnsunblock?' + app.app);
   blocks.value = await loadBlocks();
 }
+
 async function enableAll(app) {
-  await fetch(conf.server + 'dnsunblockall?'+app.app);
+  await fetch(conf.server + 'dnsunblockall?' + app.app);
   blocks.value = await loadBlocks();
 }
+
 async function disable(app) {
-  await fetch(conf.server + 'dnsblock?'+app.app);
+  await fetch(conf.server + 'dnsblock?' + app.app);
   blocks.value = await loadBlocks();
 }
+
 async function disableAll(app) {
-  await fetch(conf.server + 'dnsblockall?'+app.app);
+  await fetch(conf.server + 'dnsblockall?' + app.app);
   blocks.value = await loadBlocks();
 }
 </script>

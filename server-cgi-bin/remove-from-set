@@ -1,0 +1,10 @@
+#!/bin/bash
+echo "Content-Type: text/plain"
+echo "Access-Control-Allow-Origin: *"
+echo
+
+. _create_structs_
+IFS='/'; qargs=($QUERY_STRING); unset IFS;
+sudo nft delete element ip filter ${qargs[0]} \{ ${qargs[1]} \}
+sudo nft delete element ip nat ${qargs[0]} \{ ${qargs[1]} \}
+sudo nft list ruleset | grep -v tun > /etc/nftables.conf

@@ -1,0 +1,7 @@
+#!/bin/bash
+echo "Content-Type: text/plain"
+echo "Access-Control-Allow-Origin: *"
+echo
+echo "'$QUERY_STRING'"
+sudo nft add rule nat prerouting ether saddr $QUERY_STRING udp dport 53 redirect to :5300
+sudo nft list ruleset | grep -v tun > /etc/nftables.conf
