@@ -2,75 +2,56 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.NetworkInformation;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
+using Quartz;
 using RouterNftConfig.Server.ARP;
 using RouterNftConfig.Server.DHCP;
 using RouterNftConfig.Server.MACPrefixes;
 using RouterNftConfig.Server.Models;
-using RouterNftConfig.Server.NFT;
 
 namespace RouterNftConfig.Server
 {
     [Route("api")]
     public class ApiController : Controller
     {
-        private readonly INftablesClient _nftablesClient;
+        private readonly NftManager _manager;
         private readonly IArpClient _arpClient;
         private readonly IDhcpLeaseReader _dhcpLeaseReader;
         private readonly IMacVendorResolver _macVendorResolver;
-        private readonly string _configFile;
+        private readonly IScheduler _scheduler;
 
-        public ApiController(INftablesClient nftablesClient, IArpClient arpClient, IDhcpLeaseReader dhcpLeaseReader, IMacVendorResolver macVendorResolver, IConfiguration config)
+        public ApiController(NftManager manager, IArpClient arpClient, IDhcpLeaseReader dhcpLeaseReader, IMacVendorResolver macVendorResolver, IConfiguration config, IScheduler scheduler)
         {
-            _nftablesClient = nftablesClient;
+            _manager = manager;
             _arpClient = arpClient;
             _dhcpLeaseReader = dhcpLeaseReader;
             _macVendorResolver = macVendorResolver;
-            _configFile = config["configFile"] ?? "config.json";
+            _scheduler = scheduler;
         }
 
-        private async Task<Configuration> GetConfiguration()
-        {
-            if (!System.IO.File.Exists(_configFile)) return new Configuration();
-            return System.Text.Json.JsonSerializer.Deserialize<Configuration>(await System.IO.File.ReadAllTextAsync(_configFile), Options) ??
-                   new Configuration();
-        }
-
-        private static readonly JsonSerializerOptions Options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
-        {
-            Converters = { new JsonStringEnumConverter() },
-            WriteIndented = true
-        };
-
-        private async Task SaveConfiguration(Configuration config)
-        {
-            await System.IO.File.WriteAllTextAsync(_configFile, System.Text.Json.JsonSerializer.Serialize(config, Options));
-        }
 
         [HttpGet("hide/{mac}")]
         public async Task HideHost([FromRoute] string mac)
         {
-            var config = await GetConfiguration();
+            var config = await _manager.GetConfiguration();
             config.HiddenHosts.Add(PhysicalAddress.Parse(mac).ToString());
-            await SaveConfiguration(config);
+            await _manager.SaveConfiguration(config);
         }
 
         [HttpGet("unhide/{mac}")]
         public async Task UnhideHost([FromRoute] string mac)
         {
-            var config = await GetConfiguration();
+            var config = await _manager.GetConfiguration();
             config.HiddenHosts.Remove(PhysicalAddress.Parse(mac).ToString());
-            await SaveConfiguration(config);
+            await _manager.SaveConfiguration(config);
         }
 
         [HttpPost]
         public async Task UpdateHost([FromBody] UpdateHostRequest request)
         {
-            var config = await GetConfiguration();
+            var config = await _manager.GetConfiguration();
             var knownHost = config.KnownHosts.FirstOrDefault(z => PhysicalAddress.Parse(z.MacAddress).Equals(PhysicalAddress.Parse(request.MacAddress)));
             if (knownHost == null)
             {
@@ -82,13 +63,13 @@ namespace RouterNftConfig.Server
 
             knownHost.Name = request.Name;
             knownHost.Groups = request.Groups ?? [];
-            await SaveConfiguration(config);
+            await _manager.SaveConfiguration(config);
         }
 
         [HttpPost("action")]
         public async Task UpdateAction([FromBody]UpdateActionRequest request)
         {
-            var config = await GetConfiguration();
+            var config = await _manager.GetConfiguration();
             FirewallAction action;
             if (string.IsNullOrEmpty(request.Id))
             {
@@ -105,13 +86,29 @@ namespace RouterNftConfig.Server
             action.Action = request.Action;
             action.Group = request.Group;
             action.Flag = request.Flag;
-            await SaveConfiguration(config);
+            await _manager.SaveConfiguration(config);
+            CreateSchedule(config);
         }
+
+        private void CreateSchedule(Configuration config)
+        {
+            _scheduler.Clear();
+            foreach (var action in config.Actions.Where(x=>x.TriggerType==TriggerType.Schedule))
+            {
+                _scheduler.ScheduleJob(JobBuilder.Create<RunActionJob>()
+                        .UsingJobData("action", action)
+                        .Build(),
+                    TriggerBuilder.Create()
+                        .WithCronSchedule(action.TriggerValue)
+                        .Build());
+            }
+        }
+
 
         [HttpGet("defines")]
         public async Task<DefinitionsResponse> GetDefinitions()
         {
-            var config = await GetConfiguration();
+            var config = await _manager.GetConfiguration();
             return new DefinitionsResponse
             {
                 Groups = config.Actions.Select(x => x.Group)
@@ -126,7 +123,7 @@ namespace RouterNftConfig.Server
         [HttpGet("state")]
         public async Task<Host[]> GetState([FromQuery] bool includeHidden = false)
         {
-            var config = await GetConfiguration();
+            var config = await _manager.GetConfiguration();
             Task<IReadOnlyList<ArpMapping>> arpMap;
             Task<IReadOnlyList<DhcpLease>> dhcpLeases;
             await Task.WhenAll(arpMap = _arpClient.GetMappingsAsync(), dhcpLeases = _dhcpLeaseReader.GetActiveLeasesAsync());

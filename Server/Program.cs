@@ -14,6 +14,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Quartz;
 using RouterNftConfig.Server.ARP;
 using RouterNftConfig.Server.DHCP;
 using RouterNftConfig.Server.MACPrefixes;
@@ -84,6 +85,7 @@ class Program {
 
         services.AddRouting();
         services.AddOptions();
+        services.AddQuartz();
     }
 
     public void ConfigureContainer(ContainerBuilder builder) {
@@ -99,6 +101,7 @@ class Program {
         }
         builder.RegisterType<IscDhcpLeaseFileReader>().AsImplementedInterfaces();
         builder.RegisterType<IeeeMacVendorResolver>().AsImplementedInterfaces();
+        builder.RegisterType<NftManager>().AsSelf();
     }
 
     public ILifetimeScope AutofacContainer { get; set; }
