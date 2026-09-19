@@ -1,5 +1,3 @@
-using System.Threading;
-using System.Threading.Tasks;
 using Quartz;
 using RouterNftConfig.Server.Models;
 
@@ -16,15 +14,6 @@ public class RunActionJob : IJob
 
     public async ValueTask Execute(IJobExecutionContext context, CancellationToken cancellationToken = new CancellationToken())
     {
-        var action = (FirewallActionDefinition)context.MergedJobDataMap["action"];
-        switch (action.Action)
-        {
-            case FirewallActionType.AddFlag:
-                _manager.SetFlag(action.Flag, true);
-                break;
-            case FirewallActionType.RemoveFlag:
-                _manager.SetFlag(action.Flag, false);
-                break;
-        }
+        await _manager.RunAction((FirewallActionDefinition)context.MergedJobDataMap["action"]!);
     }
 }

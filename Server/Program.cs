@@ -1,19 +1,8 @@
-using System;
-using System.IO;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
-using System.Threading.Tasks;
 using Autofac;
 using Autofac.Extensions.DependencyInjection;
-using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Quartz;
 using RouterNftConfig.Server.ARP;
 using RouterNftConfig.Server.DHCP;
@@ -67,6 +56,11 @@ class Program {
                 );
             }
         );
+        app.ApplicationServices.GetService<IHostApplicationLifetime>().ApplicationStarted.Register(() =>
+            {
+                app.ApplicationServices.GetService<NftManager>().Startup();
+            }
+        );
     }
 
     public void ConfigureServices(IServiceCollection services)
@@ -85,7 +79,8 @@ class Program {
 
         services.AddRouting();
         services.AddOptions();
-        services.AddQuartz();
+        services.AddQuartz(options => options.UseDefaultThreadPool(maxConcurrency: 1));
+        services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
     }
 
     public void ConfigureContainer(ContainerBuilder builder) {

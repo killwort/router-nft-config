@@ -1,5 +1,3 @@
-using System;
-
 namespace RouterNftConfig.Server;
 
 public class ApiErrorException : Exception {

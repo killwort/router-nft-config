@@ -4,5 +4,5 @@ public class KnownHost
 {
     public string MacAddress { get; set; }
     public string Name { get; set; }
-    public string[] Groups { get; set; }
+    public string[]? Groups { get; set; }
 }

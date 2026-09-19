@@ -1,6 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
-using RouterNftConfig.Server;
 
 namespace RouterNftConfig.Server;
 

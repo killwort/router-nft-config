@@ -1,7 +1,3 @@
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-
 namespace RouterNftConfig.Server.ARP;
 
 /// <summary>Reads the current IPv4 neighbour (ARP) table.</summary>

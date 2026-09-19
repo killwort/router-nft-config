@@ -1,11 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace RouterNftConfig.Server.NFT;
 
@@ -57,58 +51,197 @@ public sealed class NftFileMockClient : INftablesClient, IAsyncDisposable
         finally { _gate.Release(); }
     }
 
-    public Task ReplaceSetAsync(
-        NftSetRef set,
-        IEnumerable<NftSetElement> elements,
-        CancellationToken cancellationToken = default)
+    public INftablesBatch CreateBatch() => new NftablesBatch(ExecuteMutationsAsync);
+
+    private async Task<NftExecutionResult> ExecuteMutationsAsync(
+        IReadOnlyList<NftMutation> mutations,
+        CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(elements);
-        var values = elements.Select(x => x.Value).ToArray();
-        return MutateAsync(root =>
+        if (mutations.Count == 0)
+            return new NftExecutionResult(
+                0, string.Empty, string.Empty, IsSimulated: true, StateChanged: false);
+
+        await MutateAsync(root =>
         {
-            var setObject = FindDefinition(root, "set", set.Family, set.Table, set.Name)
-                ?? throw new NftablesException($"Mock set '{set.ToNftPath()}' does not exist.");
-            setObject["elem"] = new JsonArray(
-                values.Select(x => (JsonNode?)JsonValue.Create(x)).ToArray());
-        }, cancellationToken);
+            foreach (var mutation in mutations)
+            {
+                switch (mutation)
+                {
+                    case CreateSetMutation createSet:
+                        ApplyCreateSet(root, createSet);
+                        break;
+                    case DeleteSetMutation deleteSet:
+                        ApplyDeleteSet(root, deleteSet);
+                        break;
+                    case CreateChainMutation createChain:
+                        ApplyCreateChain(root, createChain);
+                        break;
+                    case ReplaceSetMutation replaceSet:
+                        ApplyReplaceSet(root, replaceSet);
+                        break;
+                    case ReplaceChainTextMutation replaceChainText:
+                        ApplyReplaceChain(root, replaceChainText);
+                        break;
+                    case ReplaceChainParsedMutation replaceChainParsed:
+                        ApplyReplaceChain(root, replaceChainParsed);
+                        break;
+                    default:
+                        throw new NotSupportedException(
+                            $"Unsupported mock mutation '{mutation.GetType().Name}'.");
+                }
+            }
+        }, cancellationToken).ConfigureAwait(false);
+
+        return new NftExecutionResult(
+            0, string.Empty, string.Empty, IsSimulated: true, StateChanged: true);
     }
 
-    public Task ReplaceChainAsync(
-        NftChainRef chain,
-        IEnumerable<NftRuleDefinition> rules,
-        CancellationToken cancellationToken = default)
+    private static void ApplyCreateSet(JsonObject root, CreateSetMutation operation)
     {
-        ArgumentNullException.ThrowIfNull(rules);
-        var materialized = rules.ToArray();
-        return MutateAsync(root =>
+        var set = operation.Set;
+        var definition = operation.Definition;
+        var nftables = RequireNftables(root);
+        if (FindTableIndex(nftables, set.Family, set.Table) < 0)
+            throw new NftablesException(
+                $"Mock table '{set.Family.ToNftString()} {set.Table}' does not exist.");
+        if (FindDefinition(root, "set", set.Family, set.Table, set.Name) is not null)
+            throw new NftablesException($"Mock set '{set.ToNftPath()}' already exists.");
+
+        var flags = definition.EffectiveFlags().Select(x => x.ToNftString()).ToArray();
+        var elements = definition.InitialElements.Select(x => x.Value).ToArray();
+        var body = new JsonObject
         {
-            var nftables = RequireNftables(root);
-            var chainIndex = FindDefinitionIndex(nftables, "chain", chain.Family, chain.Table, chain.Name);
-            if (chainIndex < 0)
-                throw new NftablesException($"Mock chain '{chain.ToNftPath()}' does not exist.");
+            ["family"] = set.Family.ToNftString(),
+            ["table"] = set.Table,
+            ["name"] = set.Name,
+            ["type"] = definition.Type.ToNftString(),
+            ["elem"] = new JsonArray(
+                elements.Select(x => (JsonNode?)JsonValue.Create(x)).ToArray())
+        };
+        if (flags.Length > 0)
+            body["flags"] = new JsonArray(
+                flags.Select(x => (JsonNode?)JsonValue.Create(x)).ToArray());
+        if (definition.Timeout is { } timeout)
+            body["timeout"] = NftSetDefinition.ToWholeSeconds(timeout, nameof(definition.Timeout));
+        if (definition.GarbageCollectionInterval is { } gcInterval)
+            body["gc-interval"] = NftSetDefinition.ToWholeSeconds(
+                gcInterval, nameof(definition.GarbageCollectionInterval));
+        if (definition.Size is { } size) body["size"] = size;
+        if (definition.Policy is { } policy) body["policy"] = policy.ToNftString();
+        if (definition.AutoMerge) body["auto-merge"] = true;
+        if (!string.IsNullOrWhiteSpace(definition.Comment)) body["comment"] = definition.Comment;
 
-            for (var i = nftables.Count - 1; i >= 0; i--)
-            {
-                if (IsRuleFor(nftables[i], chain)) nftables.RemoveAt(i);
-            }
+        var tableIndex = FindTableIndex(nftables, set.Family, set.Table);
+        nftables.Insert(tableIndex + 1, new JsonObject { ["set"] = body });
+    }
 
-            chainIndex = FindDefinitionIndex(nftables, "chain", chain.Family, chain.Table, chain.Name);
-            var insertionIndex = chainIndex + 1;
-            foreach (var rule in materialized)
+    private static void ApplyDeleteSet(JsonObject root, DeleteSetMutation operation)
+    {
+        var set = operation.Set;
+        var nftables = RequireNftables(root);
+        var index = FindDefinitionIndex(nftables, "set", set.Family, set.Table, set.Name);
+        if (index < 0) throw new NftablesException($"Mock set '{set.ToNftPath()}' does not exist.");
+        nftables.RemoveAt(index);
+    }
+
+    private static void ApplyCreateChain(JsonObject root, CreateChainMutation operation)
+    {
+        var chain = operation.Chain;
+        var definition = operation.Definition;
+        var nftables = RequireNftables(root);
+        var tableIndex = FindTableIndex(nftables, chain.Family, chain.Table);
+        if (tableIndex < 0)
+            throw new NftablesException(
+                $"Mock table '{chain.Family.ToNftString()} {chain.Table}' does not exist.");
+        if (FindDefinition(root, "chain", chain.Family, chain.Table, chain.Name) is not null)
+            throw new NftablesException($"Mock chain '{chain.ToNftPath()}' already exists.");
+
+        var body = new JsonObject
+        {
+            ["family"] = chain.Family.ToNftString(),
+            ["table"] = chain.Table,
+            ["name"] = chain.Name
+        };
+        if (definition.Type is { } type)
+        {
+            body["type"] = type.ToNftString();
+            body["hook"] = definition.Hook!.Value.ToNftString();
+            body["prio"] = definition.Priority!.Value;
+            if (!string.IsNullOrWhiteSpace(definition.Device)) body["dev"] = definition.Device;
+            if (definition.Policy is { } policy) body["policy"] = policy.ToNftString();
+        }
+        if (!string.IsNullOrWhiteSpace(definition.Comment)) body["comment"] = definition.Comment;
+        nftables.Insert(tableIndex + 1, new JsonObject { ["chain"] = body });
+    }
+
+    private static void ApplyReplaceSet(JsonObject root, ReplaceSetMutation operation)
+    {
+        var set = operation.Set;
+        var setObject = FindDefinition(root, "set", set.Family, set.Table, set.Name)
+            ?? throw new NftablesException($"Mock set '{set.ToNftPath()}' does not exist.");
+        setObject["elem"] = new JsonArray(
+            operation.Elements.Select(x => (JsonNode?)JsonValue.Create(x.Value)).ToArray());
+    }
+
+    private static void ApplyReplaceChain(JsonObject root, ReplaceChainTextMutation operation)
+    {
+        var chain = operation.Chain;
+        var (nftables, insertionIndex) = FlushChainRules(root, chain);
+        foreach (var rule in operation.Rules)
+        {
+            nftables.Insert(insertionIndex++, new JsonObject
             {
-                nftables.Insert(insertionIndex++, new JsonObject
+                ["rule"] = new JsonObject
                 {
-                    ["rule"] = new JsonObject
-                    {
-                        ["family"] = chain.Family.ToNftString(),
-                        ["table"] = chain.Table,
-                        ["chain"] = chain.Name,
-                        ["expr"] = new JsonArray(),
-                        ["mock_expression"] = rule.Expression
-                    }
-                });
-            }
-        }, cancellationToken);
+                    ["family"] = chain.Family.ToNftString(),
+                    ["table"] = chain.Table,
+                    ["chain"] = chain.Name,
+                    ["expr"] = new JsonArray(),
+                    ["mock_expression"] = rule.Expression
+                }
+            });
+        }
+    }
+
+    private static void ApplyReplaceChain(JsonObject root, ReplaceChainParsedMutation operation)
+    {
+        var chain = operation.Chain;
+        var (nftables, insertionIndex) = FlushChainRules(root, chain);
+        foreach (var rule in operation.Rules)
+        {
+            _ = NftRuleTextRenderer.Render(
+                rule.Expressions, rule.Comment, rule.MockExpression);
+            var expressions = new JsonArray(rule.Expressions
+                .Select(expression => JsonNode.Parse(expression.GetRawText()))
+                .ToArray());
+            var body = new JsonObject
+            {
+                ["family"] = chain.Family.ToNftString(),
+                ["table"] = chain.Table,
+                ["chain"] = chain.Name,
+                ["expr"] = expressions
+            };
+            if (!string.IsNullOrWhiteSpace(rule.Comment)) body["comment"] = rule.Comment;
+            if (!string.IsNullOrWhiteSpace(rule.MockExpression))
+                body["mock_expression"] = rule.MockExpression;
+            nftables.Insert(insertionIndex++, new JsonObject { ["rule"] = body });
+        }
+    }
+
+    private static (JsonArray Nftables, int InsertionIndex) FlushChainRules(
+        JsonObject root,
+        NftChainRef chain)
+    {
+        var nftables = RequireNftables(root);
+        var chainIndex = FindDefinitionIndex(nftables, "chain", chain.Family, chain.Table, chain.Name);
+        if (chainIndex < 0)
+            throw new NftablesException($"Mock chain '{chain.ToNftPath()}' does not exist.");
+
+        for (var i = nftables.Count - 1; i >= 0; i--)
+            if (IsRuleFor(nftables[i], chain)) nftables.RemoveAt(i);
+
+        chainIndex = FindDefinitionIndex(nftables, "chain", chain.Family, chain.Table, chain.Name);
+        return (nftables, chainIndex + 1);
     }
 
     private async Task MutateAsync(Action<JsonObject> mutation, CancellationToken cancellationToken)
@@ -194,6 +327,17 @@ public sealed class NftFileMockClient : INftablesClient, IAsyncDisposable
             if (nftables[i]?[kind] is not JsonObject definition) continue;
             if (String(definition, "family") == family.ToNftString() &&
                 String(definition, "table") == table && String(definition, "name") == name)
+                return i;
+        }
+        return -1;
+    }
+
+    private static int FindTableIndex(JsonArray nftables, NftFamily family, string name)
+    {
+        for (var i = 0; i < nftables.Count; i++)
+        {
+            if (nftables[i]?["table"] is not JsonObject table) continue;
+            if (String(table, "family") == family.ToNftString() && String(table, "name") == name)
                 return i;
         }
         return -1;

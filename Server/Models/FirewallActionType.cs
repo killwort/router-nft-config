@@ -4,6 +4,6 @@ public enum FirewallActionType
 {
     AllowRouting,
     BlockRouting,
-    AddFlag,
-    RemoveFlag
+    SetFlag,
+    UnsetFlag
 }

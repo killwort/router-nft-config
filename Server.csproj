@@ -3,14 +3,13 @@
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
-        <ImplicitUsings>disable</ImplicitUsings>
+        <ImplicitUsings>enable</ImplicitUsings>
         <RootNamespace>RouterNftConfig</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>
       <PackageReference Include="Autofac" Version="9.3.4" />
       <PackageReference Include="Autofac.Extensions.DependencyInjection" Version="11.0.2" />
-      <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.12" />
       <PackageReference Include="Quartz" Version="4.1.0" />
     </ItemGroup>
 

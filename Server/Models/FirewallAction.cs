@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace RouterNftConfig.Server.Models;
+﻿namespace RouterNftConfig.Server.Models;
 
 public class FirewallAction : FirewallActionDefinition
 {
@@ -13,4 +11,9 @@ public class FirewallAction : FirewallActionDefinition
     }
 
     public string Id { get; set; }
+
+    public override string ToString()
+    {
+        return $"{Id} {TriggerType} {TriggerValue} for {ActionType} {ActionValue}";
+    }
 }

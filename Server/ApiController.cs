@@ -1,15 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.NetworkInformation;
-using System.Threading.Tasks;
+﻿using System.Net.NetworkInformation;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
-using Quartz;
 using RouterNftConfig.Server.ARP;
 using RouterNftConfig.Server.DHCP;
 using RouterNftConfig.Server.MACPrefixes;
 using RouterNftConfig.Server.Models;
+using RouterNftConfig.Server.NFT;
+using Host = RouterNftConfig.Server.Models.Host;
 
 namespace RouterNftConfig.Server
 {
@@ -17,18 +13,25 @@ namespace RouterNftConfig.Server
     public class ApiController : Controller
     {
         private readonly NftManager _manager;
+        private readonly INftablesClient _nftClient;
         private readonly IArpClient _arpClient;
         private readonly IDhcpLeaseReader _dhcpLeaseReader;
         private readonly IMacVendorResolver _macVendorResolver;
-        private readonly IScheduler _scheduler;
 
-        public ApiController(NftManager manager, IArpClient arpClient, IDhcpLeaseReader dhcpLeaseReader, IMacVendorResolver macVendorResolver, IConfiguration config, IScheduler scheduler)
+        public ApiController(NftManager manager, INftablesClient nftClient, IArpClient arpClient, IDhcpLeaseReader dhcpLeaseReader, IMacVendorResolver macVendorResolver)
         {
             _manager = manager;
+            _nftClient = nftClient;
             _arpClient = arpClient;
             _dhcpLeaseReader = dhcpLeaseReader;
             _macVendorResolver = macVendorResolver;
-            _scheduler = scheduler;
+        }
+
+        [HttpGet("rules")]
+        public async Task<NftRuleset> GetRuleset()
+        {
+            var ruleset = await _nftClient.ListRulesetAsync();
+            return ruleset;
         }
 
 
@@ -64,10 +67,11 @@ namespace RouterNftConfig.Server
             knownHost.Name = request.Name;
             knownHost.Groups = request.Groups ?? [];
             await _manager.SaveConfiguration(config);
+            await _manager.UpdateSets();
         }
 
         [HttpPost("action")]
-        public async Task UpdateAction([FromBody]UpdateActionRequest request)
+        public async Task UpdateAction([FromBody] UpdateActionRequest request)
         {
             var config = await _manager.GetConfiguration();
             FirewallAction action;
@@ -81,29 +85,27 @@ namespace RouterNftConfig.Server
             {
                 action = config.Actions.First(x => string.Equals(x.Id, request.Id, StringComparison.OrdinalIgnoreCase));
             }
+
             action.TriggerType = request.TriggerType;
             action.TriggerValue = request.TriggerValue;
-            action.Action = request.Action;
-            action.Group = request.Group;
-            action.Flag = request.Flag;
+            action.ActionValue = request.ActionValue;
+            action.ActionType = request.ActionType;
             await _manager.SaveConfiguration(config);
-            CreateSchedule(config);
+            _manager.RecreateSchedule(config);
         }
 
-        private void CreateSchedule(Configuration config)
+        [HttpGet("flag/{flag}/set")]
+        public async Task SetFlag([FromRoute] string flag)
         {
-            _scheduler.Clear();
-            foreach (var action in config.Actions.Where(x=>x.TriggerType==TriggerType.Schedule))
-            {
-                _scheduler.ScheduleJob(JobBuilder.Create<RunActionJob>()
-                        .UsingJobData("action", action)
-                        .Build(),
-                    TriggerBuilder.Create()
-                        .WithCronSchedule(action.TriggerValue)
-                        .Build());
-            }
+            await _manager.SetFlag(flag, true);
         }
 
+
+        [HttpGet("flag/{flag}/unset")]
+        public async Task UnsetFlag([FromRoute] string flag)
+        {
+            await _manager.SetFlag(flag, false);
+        }
 
         [HttpGet("defines")]
         public async Task<DefinitionsResponse> GetDefinitions()
@@ -111,12 +113,13 @@ namespace RouterNftConfig.Server
             var config = await _manager.GetConfiguration();
             return new DefinitionsResponse
             {
-                Groups = config.Actions.Select(x => x.Group)
+                Groups = config.Actions.Where(x => x.ActionType == FirewallActionType.AllowRouting || x.ActionType == FirewallActionType.BlockRouting).Select(x => x.ActionValue)
                     .Concat(config.KnownHosts.SelectMany(x => x.Groups ?? []))
                     .Where(x => x != null)
                     .Distinct()
                     .OrderBy(x => x).ToArray()!,
-                Flags = config.Actions.Select(x => x.Flag).Where(x => x != null).Distinct().OrderBy(x => x).ToArray()!
+                Flags = config.Actions.Where(x => x.ActionType == FirewallActionType.SetFlag || x.ActionType == FirewallActionType.UnsetFlag).Select(x => x.ActionValue).Where(x => x != null)
+                    .Distinct().OrderBy(x => x).ToArray()!
             };
         }
 

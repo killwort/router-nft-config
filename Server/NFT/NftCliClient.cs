@@ -1,10 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace RouterNftConfig.Server.NFT;
 
@@ -34,40 +28,20 @@ public sealed class NftCliClient : INftablesClient
         return NftRulesetJson.Parse(result.StandardOutput);
     }
 
-    public async Task ReplaceSetAsync(
-        NftSetRef set,
-        IEnumerable<NftSetElement> elements,
-        CancellationToken cancellationToken = default)
+    public INftablesBatch CreateBatch() => new NftablesBatch(ExecuteMutationsAsync);
+
+    private async Task<NftExecutionResult> ExecuteMutationsAsync(
+        IReadOnlyList<NftMutation> mutations,
+        CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(elements);
-        var materialized = elements.ToArray();
-        var batch = new StringBuilder()
-            .Append("flush set ").AppendLine(set.ToNftPath());
-        if (materialized.Length > 0)
-        {
-            batch.Append("add element ").Append(set.ToNftPath()).Append(" { ")
-                .Append(string.Join(", ", materialized.Select(x => x.ToNftLiteral())))
-                .AppendLine(" }");
-        }
+        if (mutations.Count == 0)
+            return new NftExecutionResult(0, string.Empty, string.Empty, StateChanged: false);
 
-        var result = await ExecuteBatchAsync(batch.ToString(), cancellationToken).ConfigureAwait(false);
-        EnsureSuccess(result, $"replace set {set.ToNftPath()}");
-    }
-
-    public async Task ReplaceChainAsync(
-        NftChainRef chain,
-        IEnumerable<NftRuleDefinition> rules,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(rules);
-        var batch = new StringBuilder()
-            .Append("flush chain ").AppendLine(chain.ToNftPath());
-        foreach (var rule in rules)
-            batch.Append("add rule ").Append(chain.ToNftPath()).Append(' ')
-                .AppendLine(rule.Expression);
-
-        var result = await ExecuteBatchAsync(batch.ToString(), cancellationToken).ConfigureAwait(false);
-        EnsureSuccess(result, $"replace chain {chain.ToNftPath()}");
+        var script = NftMutationBatchRenderer.RenderText(mutations);
+        //Console.WriteLine($"nft -f {script}");
+        var result = await ExecuteBatchAsync(script, cancellationToken).ConfigureAwait(false);
+        EnsureSuccess(result, "execute mutation batch");
+        return result;
     }
 
     private async Task<NftExecutionResult> RunAsync(

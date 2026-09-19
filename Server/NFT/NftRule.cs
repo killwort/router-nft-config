@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using System.Text.Json;
+﻿using System.Text.Json;
 
 namespace RouterNftConfig.Server.NFT;
 
@@ -12,4 +11,7 @@ public sealed record NftRule(
     string? Comment,
     IReadOnlyList<JsonElement> Expressions,
     string? MockExpression,
-    JsonElement Raw);
+    JsonElement Raw) : IReferencedObject
+{
+    public string Name => Chain;
+};

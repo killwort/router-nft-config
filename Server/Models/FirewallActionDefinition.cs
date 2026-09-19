@@ -9,14 +9,12 @@ public class FirewallActionDefinition
     {
         TriggerType = src.TriggerType;
         TriggerValue = src.TriggerValue;
-        Action = src.Action;
-        Group = src.Group;
-        Flag = src.Flag;
+        ActionType = src.ActionType;
+        ActionValue = src.ActionValue;
     }
 
     public TriggerType TriggerType { get; set; }
     public string TriggerValue { get; set; }
-    public FirewallActionType Action { get; set; }
-    public string? Group { get; set; }
-    public string? Flag { get; set; }
+    public FirewallActionType ActionType{ get; set; }
+    public string ActionValue { get; set; }
 }

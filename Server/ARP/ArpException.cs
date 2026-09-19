@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace RouterNftConfig.Server.ARP;
+﻿namespace RouterNftConfig.Server.ARP;
 
 public sealed class ArpException : Exception
 {

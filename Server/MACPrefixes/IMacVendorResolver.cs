@@ -1,6 +1,4 @@
 using System.Net.NetworkInformation;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace RouterNftConfig.Server.MACPrefixes;
 

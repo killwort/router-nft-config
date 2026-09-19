@@ -3,5 +3,6 @@
 public enum TriggerType
 {
     Schedule,
-    Flag
+    FlagSet,
+    FlagUnset
 }
