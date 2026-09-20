@@ -32,7 +32,7 @@ public sealed record NftSetDefinition
         if (Policy is { } policy) result.Append(" policy ").Append(policy.ToNftString()).Append(';');
         if (AutoMerge) result.Append(" auto-merge;");
         if (!string.IsNullOrWhiteSpace(Comment))
-            result.Append(" comment ").Append((string?)NftSyntax.StringLiteral(Comment)).Append(';');
+            result.Append(" comment ").Append(NftSyntax.StringLiteral(Comment)).Append(';');
         if (InitialElements.Count > 0)
             result.Append(" elements = { ")
                 .Append(string.Join(", ", InitialElements.Select(x => x.ToNftLiteral())))

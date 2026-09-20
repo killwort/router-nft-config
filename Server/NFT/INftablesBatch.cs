@@ -1,3 +1,7 @@
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+
 namespace RouterNftConfig.Server.NFT;
 
 /// <summary>
@@ -13,6 +17,9 @@ public interface INftablesBatch
 
     /// <summary>Queues deletion of an existing named set.</summary>
     INftablesBatch DeleteSet(NftSetRef set);
+
+    /// <summary>Queues addition of one element to an existing named set.</summary>
+    INftablesBatch AddSetElement(NftSetRef set, NftSetElement element);
 
     /// <summary>Queues strict creation of a chain.</summary>
     INftablesBatch CreateChain(NftChainRef chain);

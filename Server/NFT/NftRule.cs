@@ -10,7 +10,6 @@ public sealed record NftRule(
     long? Index,
     string? Comment,
     IReadOnlyList<JsonElement> Expressions,
-    string? MockExpression,
     JsonElement Raw) : IReferencedObject
 {
     public string Name => Chain;

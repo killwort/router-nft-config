@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace RouterNftConfig.Server.NFT;
 
 /// <summary>Convenience entry points for starting a mutation batch from a client.</summary>
@@ -16,6 +19,15 @@ public static class NftablesClientBatchExtensions
     {
         ArgumentNullException.ThrowIfNull(client);
         return client.CreateBatch().DeleteSet(set);
+    }
+
+    public static INftablesBatch AddSetElement(
+        this INftablesClient client,
+        NftSetRef set,
+        NftSetElement element)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        return client.CreateBatch().AddSetElement(set, element);
     }
 
     public static INftablesBatch CreateChain(this INftablesClient client, NftChainRef chain)

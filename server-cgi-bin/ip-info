@@ -1,8 +1,0 @@
-#!/bin/bash
-echo "Content-Type: text/plain"
-echo "Access-Control-Allow-Origin: *"
-echo
-
-IFS='/'; qargs=($QUERY_STRING); unset IFS;
-host "${qargs[0]}"
-whois "${qargs[0]}"

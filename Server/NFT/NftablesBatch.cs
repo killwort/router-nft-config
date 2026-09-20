@@ -1,3 +1,9 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+
 namespace RouterNftConfig.Server.NFT;
 
 public sealed class NftablesBatch : INftablesBatch
@@ -33,6 +39,15 @@ public sealed class NftablesBatch : INftablesBatch
         EnsureMutable();
         _ = set.ToNftPath();
         _mutations.Add(new DeleteSetMutation(set));
+        return this;
+    }
+
+    public INftablesBatch AddSetElement(NftSetRef set, NftSetElement element)
+    {
+        EnsureMutable();
+        ArgumentNullException.ThrowIfNull(element);
+        _ = set.ToNftPath();
+        _mutations.Add(new AddSetElementMutation(set, element));
         return this;
     }
 
@@ -83,8 +98,7 @@ public sealed class NftablesBatch : INftablesBatch
             ArgumentNullException.ThrowIfNull(rule);
             return new NftRuleSnapshot(
                 rule.Expressions.Select(expression => expression.Clone()).ToArray(),
-                rule.Comment,
-                rule.MockExpression);
+                rule.Comment);
         }).ToArray();
         _mutations.Add(new ReplaceChainParsedMutation(chain, snapshot));
         return this;

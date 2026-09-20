@@ -1,4 +1,7 @@
 using System.Text.Json;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace RouterNftConfig.Server.NFT;
 
@@ -61,7 +64,7 @@ public static class NftRulesetJson
                 rules.Add(new NftRule(
                     Family(rule), RequiredString(rule, "table"), RequiredString(rule, "chain"),
                     Int64(rule, "handle"), Int64(rule, "index"), String(rule, "comment"),
-                    Array(rule, "expr"), String(rule, "mock_expression"), rule.Clone()));
+                    Array(rule, "expr"), rule.Clone()));
             }
             else
             {

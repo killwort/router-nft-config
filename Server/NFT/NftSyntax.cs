@@ -8,8 +8,8 @@ internal static class NftSyntax
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
         if (value.IndexOfAny(['\r', '\n', ' ', '\t']) >= 0)
-            throw new ArgumentException("An identifier must fit on one line and not contain whitespace.", nameof(value));
-        return value;
+            throw new ArgumentException("An identifier must fit on one line.", nameof(value));
+        return (value);
     }
 
     public static string StringLiteral(string value)

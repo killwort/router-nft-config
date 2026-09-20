@@ -10,8 +10,11 @@ internal sealed record ReplaceSetMutation(
     {
         output.Append("flush set ").AppendLine(Set.ToNftPath());
         if (Elements.Count > 0)
-            output.Append("add element ").Append(Set.ToNftPath()).Append(" { ")
-                .Append(string.Join(", ", Elements.Select(x => x.ToNftLiteral())))
-                .AppendLine(" }");
+        {
+            foreach (var chunk in Elements.Chunk(50))
+                output.Append("add element ").Append(Set.ToNftPath()).Append(" { ")
+                    .Append(string.Join(", ", chunk.Select(x => x.ToNftLiteral())))
+                    .AppendLine(" }");
+        }
     }
 }

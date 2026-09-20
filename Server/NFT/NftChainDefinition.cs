@@ -40,13 +40,13 @@ public sealed record NftChainDefinition
             result.Append(" type ").Append(type.ToNftString())
                 .Append(" hook ").Append(Hook!.Value.ToNftString());
             if (!string.IsNullOrWhiteSpace(Device))
-                result.Append(" device ").Append((string?)NftSyntax.StringLiteral(Device));
+                result.Append(" device ").Append(NftSyntax.StringLiteral(Device));
             result.Append(" priority ").Append(Priority!.Value).Append(';');
             if (Policy is { } policy)
                 result.Append(" policy ").Append(policy.ToNftString()).Append(';');
         }
         if (!string.IsNullOrWhiteSpace(Comment))
-            result.Append(" comment ").Append((string?)NftSyntax.StringLiteral(Comment)).Append(';');
+            result.Append(" comment ").Append(NftSyntax.StringLiteral(Comment)).Append(';');
         return result.Append(" }").ToString();
     }
 

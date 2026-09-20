@@ -91,8 +91,7 @@ class Program {
         }
         else
         {
-            builder.RegisterType<ArpFileMockClient>().AsImplementedInterfaces();
-            builder.RegisterType<NftFileMockClient>().AsImplementedInterfaces();
+            throw new Exception("This will not work on windows!");
         }
         builder.RegisterType<IscDhcpLeaseFileReader>().AsImplementedInterfaces();
         builder.RegisterType<IeeeMacVendorResolver>().AsImplementedInterfaces();

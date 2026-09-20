@@ -11,7 +11,6 @@ internal sealed record ReplaceChainParsedMutation(
         output.Append("flush chain ").AppendLine(Chain.ToNftPath());
         foreach (var rule in Rules)
             output.Append("add rule ").Append(Chain.ToNftPath()).Append(' ')
-                .AppendLine(NftRuleTextRenderer.Render(
-                    rule.Expressions, rule.Comment, rule.MockExpression));
+                .AppendLine(NftRuleTextRenderer.Render(rule.Expressions, rule.Comment));
     }
 }

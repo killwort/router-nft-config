@@ -4,5 +4,4 @@ namespace RouterNftConfig.Server.NFT;
 
 internal sealed record NftRuleSnapshot(
     IReadOnlyList<JsonElement> Expressions,
-    string? Comment,
-    string? MockExpression);
+    string? Comment);

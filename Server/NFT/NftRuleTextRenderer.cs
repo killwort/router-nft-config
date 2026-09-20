@@ -2,6 +2,9 @@ using System.Globalization;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Text.Json;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace RouterNftConfig.Server.NFT;
 
@@ -11,7 +14,7 @@ public static class NftRuleTextRenderer
     public static string Render(NftRule rule)
     {
         ArgumentNullException.ThrowIfNull(rule);
-        return Render(rule.Expressions, rule.Comment, rule.MockExpression);
+        return Render(rule.Expressions, rule.Comment);
     }
 
     public static string RenderExpression(JsonElement expression) =>
@@ -22,16 +25,11 @@ public static class NftRuleTextRenderer
 
     internal static string Render(
         IReadOnlyList<JsonElement> expressions,
-        string? comment,
-        string? mockExpression = null)
+        string? comment)
     {
         ArgumentNullException.ThrowIfNull(expressions);
         if (expressions.Count == 0)
-        {
-            if (string.IsNullOrWhiteSpace(mockExpression))
-                throw new NftRuleRenderingException("An nft rule must contain at least one statement.");
-            return AppendComment(mockExpression, comment);
-        }
+            throw new NftRuleRenderingException("An nft rule must contain at least one statement.");
 
         var renderer = new Renderer();
         var result = string.Join(' ', expressions.Select(renderer.Statement));

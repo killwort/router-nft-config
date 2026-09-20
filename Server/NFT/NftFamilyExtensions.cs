@@ -1,4 +1,6 @@
-﻿namespace RouterNftConfig.Server.NFT;
+using System.Linq;
+
+namespace RouterNftConfig.Server.NFT;
 
 public static class NftFamilyExtensions
 {

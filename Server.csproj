@@ -14,27 +14,8 @@
     </ItemGroup>
 
     <ItemGroup>
-      <None Remove="Properties\launchSettings.json" />
-      <None Remove="dist\**" />
+      <None Update="dist\**">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
     </ItemGroup>
-
-    <ItemGroup>
-      <Content Update="appsettings.Development.json">
-        <DependentUpon>appsettings.json</DependentUpon>
-      </Content>
-      <Content Remove="dist\**" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <Compile Remove="dist\**" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <EmbeddedResource Remove="dist\**" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <_ContentIncludedByDefault Remove="dist\manifest.json" />
-    </ItemGroup>
-
 </Project>

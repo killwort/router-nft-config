@@ -1,7 +1,11 @@
+using System.Net;
+using System.Net.Sockets;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Quartz;
 using Quartz.Extensibility;
+using RouterNftConfig.Server.DNS;
 using RouterNftConfig.Server.Models;
 using RouterNftConfig.Server.NFT;
 
@@ -23,14 +27,17 @@ public class NftManager
     public async Task<Configuration> GetConfiguration()
     {
         if (!System.IO.File.Exists(_configFile)) return new Configuration();
-        return JsonSerializer.Deserialize<Configuration>(await System.IO.File.ReadAllTextAsync(_configFile), Options) ??
+        return JsonSerializer.Deserialize<Configuration>(await File.ReadAllTextAsync(_configFile), Options) ??
                new Configuration();
     }
 
-    private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
+    private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.General)
     {
         Converters = { new JsonStringEnumConverter() },
-        WriteIndented = true
+        WriteIndented = true,
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
     public async Task SaveConfiguration(Configuration config)
@@ -115,19 +122,20 @@ public class NftManager
         }
     }
 
+    private static readonly NftChainRef ManagedChainRef = new(NftFamily.Ip, "filter", "scheduled_l2");
+
     private async Task AllowRouting(string setName)
     {
         var ruleset = await _nftablesClient.ListRulesetAsync();
-        var chainRef = new NftChainRef(NftFamily.Ip, "filter", "scheduled_l2");
-        var chain = ruleset.FindChain(chainRef);
+        var chain = ruleset.FindChain(ManagedChainRef);
         var batch = _nftablesClient.CreateBatch();
         if (chain == null)
         {
-            batch.CreateChain(chainRef);
+            batch.CreateChain(ManagedChainRef);
             return;
         }
 
-        var withoutDropRule = ruleset.Rules.Where(x => chainRef.Matches(x)
+        var withoutDropRule = ruleset.Rules.Where(x => ManagedChainRef.Matches(x)
                                                        && !(x.Expressions.Any(z => z.TryGetProperty("drop", out _))
                                                             && x.Expressions.Any(z => z.TryGetProperty("match", out var matchElement) // 
                                                                                       && matchElement.TryGetProperty("op", out var opElement) && opElement.ValueEquals("==") //
@@ -135,7 +143,7 @@ public class NftManager
                                                                                       rightElement.ValueEquals("@" + setName)
                                                             )
                                                            ));
-        batch.ReplaceChain(chainRef, withoutDropRule);
+        batch.ReplaceChain(ManagedChainRef, withoutDropRule);
         await batch.ExecuteAsync();
     }
 
@@ -178,6 +186,12 @@ public class NftManager
                     .Build());
             Console.WriteLine($"Created {action}");
         }
+
+        _scheduler.ScheduleJob(JobBuilder.Create<UpdateAllowedHostsJob>().WithIdentity("UpdateAllowedHostsJob").Build(),
+            TriggerBuilder.Create().WithIdentity("UpdateAllowedHostsJobTrigger").WithSimpleSchedule(TimeSpan.FromHours(1)).Build());
+        _scheduler.ScheduleJob(JobBuilder.Create<UpdateDoHsJob>().WithIdentity("UpdateDoHsJobJob").Build(),
+            TriggerBuilder.Create().WithIdentity("UpdateDoHsJobTrigger").WithSimpleSchedule(TimeSpan.FromDays(1)).Build());
+        
     }
 
     public async Task Startup()
@@ -185,6 +199,16 @@ public class NftManager
         var config = await GetConfiguration();
         await UpdateSets();
         RecreateSchedule(config);
+        await CreateDynamicAllowSet();
+        new DnstapListener().Startup((host, addr, ttl) =>
+        {
+            if (host == "whatsapp.com" || host == "whatsapp.net" || host.EndsWith(".whatsapp.com") || host.EndsWith(".whatsapp.net"))
+            {
+                if (addr.AddressFamily != AddressFamily.InterNetwork) return;
+                _nftablesClient.CreateBatch().AddSetElement(DynamicAllowSetRef, NftSetElement.Raw($"{addr.ToString()} timeout {ttl}s")).ExecuteAsync().Wait();
+                Console.WriteLine($"Updated dynamic allowed set with {host} -> {addr}");
+            }
+        });
 
         var nowUtc = DateTimeOffset.UtcNow;
         var localNow = TimeZoneInfo.ConvertTime(nowUtc, TimeZoneInfo.Local);
@@ -194,6 +218,7 @@ public class NftManager
         var toRun = new List<ScheduledJob>();
         foreach (var jobKey in jobKeys)
         {
+            if (jobKey.Name.Contains("UpdateAllowedHostsJob") || jobKey.Name.Contains("UpdateDoHsJob")) continue;
             var triggers = await _scheduler.GetTriggersOfJob(jobKey);
             ScheduledJob? latest = null;
             foreach (var trigger in triggers)
@@ -215,6 +240,34 @@ public class NftManager
         {
             await _scheduler.TriggerJob(job.JobKey);
         }
+    }
+
+    private static readonly NftSetRef DynamicAllowSetRef = new NftSetRef(NftFamily.Ip, "filter", "allowed_dynamic");
+    private async Task CreateDynamicAllowSet()
+    {
+        var ruleset = await _nftablesClient.ListRulesetAsync();
+        var batch = _nftablesClient.CreateBatch();
+        if (ruleset.FindSet(DynamicAllowSetRef) == null)
+            batch.CreateSet(DynamicAllowSetRef, new NftSetDefinition
+            {
+                Type = NftSetDataType.IPv4Address,
+                Flags = [NftSetFlag.Timeout]
+            });
+        if (!ruleset.Rules.Any(x => ManagedChainRef.Matches(x) &&
+                                    (x.Expressions.Any(z => z.TryGetProperty("return", out _))
+                                     && x.Expressions.Any(z => z.TryGetProperty("match", out var matchElement) // 
+                                                               && matchElement.TryGetProperty("op", out var opElement) && opElement.ValueEquals("==") //
+                                                               && matchElement.TryGetProperty("right", out var rightElement) && rightElement.ValueEquals("@allowed_dynamic")
+                                     )
+                                    )
+            ))
+        {
+            var rules = ruleset.Rules.Where(x => ManagedChainRef.Matches(x)).Select(NftRuleTextRenderer.Render).ToList();
+            rules.Insert(0, $"ip daddr @allowed_dynamic return");
+            batch.ReplaceChain(ManagedChainRef, rules.Select(x => new NftRuleDefinition(x)));
+        }
+
+        await batch.ExecuteAsync();
     }
 
     private static async Task<DateTimeOffset?> FindLastFireTime(IScheduler scheduler, ITrigger trigger, DateTimeOffset fromUtc, DateTimeOffset toUtc)
@@ -241,4 +294,87 @@ public class NftManager
     }
 
     private sealed record ScheduledJob(JobKey JobKey, TriggerKey TriggerKey, DateTimeOffset FireTimeUtc, int Priority);
+
+    public static SemaphoreSlim NftOperationLock = new SemaphoreSlim(1, 1);
+
+    public async Task UpdateAllowedSet()
+    {
+        var config = await GetConfiguration();
+        var ruleset = await _nftablesClient.ListRulesetAsync();
+        var setRef = new NftSetRef(NftFamily.Ip, "filter", "allowed_targets");
+        var batch = _nftablesClient.CreateBatch();
+        
+        if (ruleset.FindSet(setRef) == null)
+            batch.CreateSet(setRef, new NftSetDefinition
+            {
+                Type = NftSetDataType.IPv4Address
+            });
+        
+        if (!ruleset.Rules.Any(x => ManagedChainRef.Matches(x) &&
+                                    (x.Expressions.Any(z => z.TryGetProperty("return", out _))
+                                     && x.Expressions.Any(z => z.TryGetProperty("match", out var matchElement) // 
+                                                               && matchElement.TryGetProperty("op", out var opElement) && opElement.ValueEquals("==") //
+                                                               && matchElement.TryGetProperty("right", out var rightElement) && rightElement.ValueEquals("@allowed_targets")
+                                     )
+                                    )
+            ))
+        {
+            var rules = ruleset.Rules.Where(x => ManagedChainRef.Matches(x)).Select(NftRuleTextRenderer.Render).ToList();
+            rules.Insert(0, $"ip daddr @allowed_targets return");
+            batch.ReplaceChain(ManagedChainRef, rules.Select(x => new NftRuleDefinition(x)));
+        }
+        
+        var allIps = new HashSet<IPAddress>();
+        foreach (var host in config.AlwaysAllowedTargets ?? [])
+        {
+            allIps.UnionWith((await Dns.GetHostAddressesAsync(host)).Where(x => x.AddressFamily == AddressFamily.InterNetwork));
+        }
+
+        batch.ReplaceSet(setRef, allIps.Select(x => NftSetElement.Inet(x.ToString())));
+        Console.WriteLine($"Updated statically resolved allowed set with {allIps.Count} IPs");
+        await batch.ExecuteAsync();
+    }
+
+    private static HttpClient HttpClient = new HttpClient();
+    public async Task UpdateDoHsSet()
+    {
+        var ruleset = await _nftablesClient.ListRulesetAsync();
+        var setRef = new NftSetRef(NftFamily.Ip, "filter", "dohs");
+        var batch = _nftablesClient.CreateBatch();
+        
+        if (ruleset.FindSet(setRef) == null)
+            batch.CreateSet(setRef, new NftSetDefinition
+            {
+                Type = NftSetDataType.IPv4Address,
+                AutoMerge = true,
+                Flags = [NftSetFlag.Interval]
+            });
+        
+        if (!ruleset.Rules.Any(x => ManagedChainRef.Matches(x) &&
+                                    (x.Expressions.Any(z => z.TryGetProperty("drop", out _))
+                                     && x.Expressions.Any(z => z.TryGetProperty("match", out var matchElement) // 
+                                                               && matchElement.TryGetProperty("op", out var opElement) && opElement.ValueEquals("==") //
+                                                               && matchElement.TryGetProperty("right", out var rightElement) && rightElement.ValueEquals("@dohs")
+                                     )
+                                    )
+            ))
+        {
+            var rules = ruleset.Rules.Where(x => ManagedChainRef.Matches(x)).Select(NftRuleTextRenderer.Render).ToList();
+            rules.Insert(0, $"ip daddr @dohs drop");
+            batch.ReplaceChain(ManagedChainRef, rules.Select(x => new NftRuleDefinition(x)));
+        }
+
+        var allIps = new HashSet<string>((await HttpClient.GetStringAsync("https://raw.githubusercontent.com/dibdot/DoH-IP-blocklists/master/doh-ipv4.txt")).Split("\n")
+            .Select(x => x.Split([' ', '\t', '#'], 2)[0].Trim())
+            .Where(x => !string.IsNullOrEmpty(x))
+            .Select(x => IPAddress.TryParse(x, out var ip) ? ip : null)
+            .Where(x => x != null)
+            .Select(x=>x.ToString()));
+        await batch.ReplaceSet(setRef, []).ExecuteAsync();
+        batch = _nftablesClient.CreateBatch();
+        batch.ReplaceSet(setRef, allIps.Select(x => NftSetElement.Inet(x.ToString())));
+        Console.WriteLine($"Updated DoHs set with {allIps.Count} IPs");
+
+        await batch.ExecuteAsync();
+    }
 }

@@ -1,23 +1,21 @@
-using Quartz;
-using RouterNftConfig.Server.Models;
+﻿using Quartz;
 
 namespace RouterNftConfig.Server;
 
-public class RunActionJob : IJob
+public class UpdateDoHsJob : IJob
 {
     private readonly NftManager _manager;
 
-    public RunActionJob(NftManager manager)
+    public UpdateDoHsJob(NftManager manager)
     {
         _manager = manager;
     }
-
     public async ValueTask Execute(IJobExecutionContext context, CancellationToken cancellationToken = new CancellationToken())
     {
         await NftManager.NftOperationLock.WaitAsync(cancellationToken);
         try
         {
-            await _manager.RunAction((FirewallActionDefinition)context.MergedJobDataMap["action"]!);
+            await _manager.UpdateDoHsSet();
         }
         finally
         {
