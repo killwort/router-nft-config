@@ -1,4 +1,5 @@
-﻿using System.Net.NetworkInformation;
+﻿using System.Diagnostics;
+using System.Net.NetworkInformation;
 using Microsoft.AspNetCore.Mvc;
 using RouterNftConfig.Server.ARP;
 using RouterNftConfig.Server.DHCP;
@@ -10,7 +11,7 @@ using Host = RouterNftConfig.Server.Models.Host;
 namespace RouterNftConfig.Server
 {
     [Route("api")]
-    public class ApiController : Controller
+    public class ApiController : Microsoft.AspNetCore.Mvc.Controller
     {
         private readonly NftManager _manager;
         private readonly INftablesClient _nftClient;
@@ -94,12 +95,17 @@ namespace RouterNftConfig.Server
             _manager.RecreateSchedule(config);
         }
 
+        [HttpGet("flag/{flag}")]
+        public async Task<bool> GetFlag([FromRoute] string flag)
+        {
+            return await _manager.GetFlag(flag);
+        }
+
         [HttpGet("flag/{flag}/set")]
         public async Task SetFlag([FromRoute] string flag)
         {
             await _manager.SetFlag(flag, true);
         }
-
 
         [HttpGet("flag/{flag}/unset")]
         public async Task UnsetFlag([FromRoute] string flag)
@@ -119,8 +125,43 @@ namespace RouterNftConfig.Server
                     .Distinct()
                     .OrderBy(x => x).ToArray()!,
                 Flags = config.Actions.Where(x => x.ActionType == FirewallActionType.SetFlag || x.ActionType == FirewallActionType.UnsetFlag).Select(x => x.ActionValue).Where(x => x != null)
-                    .Distinct().OrderBy(x => x).ToArray()!
+                    .Distinct().OrderBy(x => x).ToDictionary(x => x, x => config.SetFlags.Contains(x))
             };
+        }
+
+        [HttpGet("process/forbidden")]
+        public async Task<string[]> GetForbiddenProcesses()
+        {
+            return (await _manager.GetConfiguration()).ForbiddenProcessImages.ToArray();
+        }
+
+
+        [HttpPost("process/forbid")]
+        public async Task ForbidProcess([FromBody] string name)
+        {
+            var config = await _manager.GetConfiguration();
+            if (!config.ForbiddenProcessImages.Contains(name, StringComparer.OrdinalIgnoreCase))
+            {
+                config.ForbiddenProcessImages.Add(name);
+                await _manager.SaveConfiguration(config);
+            }
+        }
+
+
+        [HttpPost("process/allow")]
+        public async Task AllowProcess([FromBody] string name)
+        {
+            var config = await _manager.GetConfiguration();
+            if (config.ForbiddenProcessImages.Contains(name, StringComparer.OrdinalIgnoreCase))
+            {
+                config.ForbiddenProcessImages.RemoveAll(x => string.Equals(name, x, StringComparison.OrdinalIgnoreCase));
+                await _manager.SaveConfiguration(config);
+            }
+        }
+
+        [HttpPost("process/upload-report")]
+        public async Task UploadReport([FromBody] ProcessInfo[] data)
+        {
         }
 
         [HttpGet("state")]

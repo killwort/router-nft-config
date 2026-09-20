@@ -377,4 +377,9 @@ public class NftManager
 
         await batch.ExecuteAsync();
     }
+
+    public async Task<bool> GetFlag(string flag)
+    {
+        return (await GetConfiguration()).SetFlags.Contains(flag);
+    }
 }

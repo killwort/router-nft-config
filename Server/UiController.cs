@@ -2,7 +2,7 @@
 
 namespace RouterNftConfig.Server;
 
-public class UiController : Controller
+public class UiController : Microsoft.AspNetCore.Mvc.Controller
 {
     [HttpGet("")]
     public IActionResult Index() => new PhysicalFileResult(Path.Combine(Environment.CurrentDirectory, "dist", "index.html"), "text/html");
