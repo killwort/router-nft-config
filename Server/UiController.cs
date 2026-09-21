@@ -4,7 +4,7 @@ namespace RouterNftConfig.Server;
 
 public class UiController : Microsoft.AspNetCore.Mvc.Controller
 {
-    [HttpGet("")]
+    [HttpGet("{**path}")]
     public IActionResult Index() => new PhysicalFileResult(Path.Combine(Environment.CurrentDirectory, "dist", "index.html"), "text/html");
 
     [HttpGet("favicon.ico")]

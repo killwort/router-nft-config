@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Net;
 using System.Net.NetworkInformation;
 using Microsoft.AspNetCore.Mvc;
 using RouterNftConfig.Server.ARP;
@@ -14,14 +15,17 @@ namespace RouterNftConfig.Server
     public class ApiController : Microsoft.AspNetCore.Mvc.Controller
     {
         private readonly NftManager _manager;
+        private readonly ProcessListManager _processListManager;
         private readonly INftablesClient _nftClient;
         private readonly IArpClient _arpClient;
         private readonly IDhcpLeaseReader _dhcpLeaseReader;
         private readonly IMacVendorResolver _macVendorResolver;
 
-        public ApiController(NftManager manager, INftablesClient nftClient, IArpClient arpClient, IDhcpLeaseReader dhcpLeaseReader, IMacVendorResolver macVendorResolver)
+        public ApiController(NftManager manager, ProcessListManager processListManager, INftablesClient nftClient, IArpClient arpClient, IDhcpLeaseReader dhcpLeaseReader,
+            IMacVendorResolver macVendorResolver)
         {
             _manager = manager;
+            _processListManager = processListManager;
             _nftClient = nftClient;
             _arpClient = arpClient;
             _dhcpLeaseReader = dhcpLeaseReader;
@@ -52,9 +56,10 @@ namespace RouterNftConfig.Server
             await _manager.SaveConfiguration(config);
         }
 
-        [HttpPost]
-        public async Task UpdateHost([FromBody] UpdateHostRequest request)
+        [HttpPost("host/{address?}")]
+        public async Task UpdateHost([FromRoute] string address, [FromBody] UpdateHostRequest request)
         {
+            request.MacAddress = address;
             var config = await _manager.GetConfiguration();
             var knownHost = config.KnownHosts.FirstOrDefault(z => PhysicalAddress.Parse(z.MacAddress).Equals(PhysicalAddress.Parse(request.MacAddress)));
             if (knownHost == null)
@@ -162,6 +167,21 @@ namespace RouterNftConfig.Server
         [HttpPost("process/upload-report")]
         public async Task UploadReport([FromBody] ProcessInfo[] data)
         {
+            var arp = (await _arpClient.GetMappingsAsync()).FirstOrDefault(x => x.InetAddress.Equals(HttpContext.Connection.RemoteIpAddress));
+            Console.WriteLine($"Got snapshot for {arp?.EtherAddress} {data?.Length}");
+            if (arp == null || data == null) return;
+            await _processListManager.RegisterSnapshot(arp.EtherAddress, data);
+        }
+
+        [HttpGet("process/{address}")]
+        public async Task<HourBucket?[]> GetReport([FromRoute] string address)
+        {
+            if (PhysicalAddress.TryParse(address, out var addr))
+            {
+                return await _processListManager.GetReport(addr) ?? [];
+            }
+
+            return [];
         }
 
         [HttpGet("state")]
@@ -173,8 +193,9 @@ namespace RouterNftConfig.Server
             await Task.WhenAll(arpMap = _arpClient.GetMappingsAsync(), dhcpLeases = _dhcpLeaseReader.GetActiveLeasesAsync());
             var allHosts = new HashSet<PhysicalAddress>(config.KnownHosts.Select(x => PhysicalAddress.Parse(x.MacAddress)));
             allHosts.UnionWith(arpMap.Result.Select(x => x.EtherAddress));
+            var hidden = config.HiddenHosts.Select(PhysicalAddress.Parse).ToArray();
             if (!includeHidden)
-                allHosts.ExceptWith(config.HiddenHosts.Select(PhysicalAddress.Parse));
+                allHosts.ExceptWith(hidden);
             return (await Task.WhenAll(allHosts.Select(async x =>
             {
                 var arpMaps = arpMap.Result.Where(z => z.EtherAddress.Equals(x)).ToArray();
@@ -188,7 +209,10 @@ namespace RouterNftConfig.Server
                     Groups = knownHost?.Groups ?? [],
                     IpAddress = arpMaps.Select(z => z.InetAddress.ToString()).ToArray(),
                     IsOnline = arpMaps.Any(),
-                    MacAddressInfo = await _macVendorResolver.ResolveAsync(x)
+                    IsHidden = hidden.Contains(x),
+                    IsKnown = knownHost != null,
+                    MacAddressInfo = await _macVendorResolver.ResolveAsync(x),
+                    HasProcessReport = _processListManager.HasData(x)
                 };
             }))).OrderBy(x => x.Name).ToArray();
         }

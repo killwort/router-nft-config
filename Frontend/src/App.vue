@@ -1,23 +1,18 @@
 <script setup>
-import NftState from "./NftState.vue";
-import {ref, watch} from "vue";
-import AppState from "@/AppState.vue";
-
-const mode = ref(localStorage.getItem('mode')||'NftState')
-const modes = {NftState, AppState};
-
-watch(mode, s=>localStorage.setItem('mode',s));
 </script>
 
 <template>
   <div :class="$style.layout">
     <div :class="$style.navbar">
-      <button @click="mode='NftState'">Правила хостов</button>
-      <button @click="mode='AppState'">Правила приложений</button>
+      <router-link to="/state">Сеть</router-link>
+      <router-link to="/flags">Флаги</router-link>
     </div>
     <div :class="$style.content">
-      <Suspense>
-        <component :is="modes[mode]"/>
+      <Suspense timeout="0">
+        <router-view/>
+        <template #fallback>
+          <div :class="$style.loading"></div>
+        </template>
       </Suspense>
     </div>
   </div>
@@ -35,8 +30,23 @@ watch(mode, s=>localStorage.setItem('mode',s));
   display: flex;
   flex-direction: row;
 }
-.content{
-  
+
+.content {
+
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, .33);
+  z-index: 1000;
 }
 
 @media (min-width: 1024px) {

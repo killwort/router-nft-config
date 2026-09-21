@@ -32,6 +32,7 @@ class Program {
 
     public void Configure(IApplicationBuilder app, ILoggerFactory loggerFactory) {
         AutofacContainer = app.ApplicationServices.GetAutofacRoot();
+        app.UseCors(builder => builder.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
         app.UseRouting().UseEndpoints(ep => ep.MapControllers());
         app.UseExceptionHandler(
             xhandlerBuilder => {
@@ -65,6 +66,10 @@ class Program {
 
     public void ConfigureServices(IServiceCollection services)
     {
+        services.AddCors(options =>
+        {
+            options.AddDefaultPolicy(builder => builder.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
+        });
         services.AddMvc(options => { options.Filters.Add<ApiExceptionFilter>(); }).AddJsonOptions(options =>
                 {
                     options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
@@ -96,6 +101,7 @@ class Program {
         builder.RegisterType<IscDhcpLeaseFileReader>().AsImplementedInterfaces();
         builder.RegisterType<IeeeMacVendorResolver>().AsImplementedInterfaces();
         builder.RegisterType<NftManager>().AsSelf();
+        builder.RegisterType<ProcessListManager>().AsSelf().SingleInstance();
     }
 
     public ILifetimeScope AutofacContainer { get; set; }

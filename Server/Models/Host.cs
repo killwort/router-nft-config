@@ -9,4 +9,7 @@ public class Host
     public string? MacAddressInfo { get; set; }
     public string[] Groups { get; set; }
     public bool IsOnline { get; set; }
+    public bool HasProcessReport { get; set; }
+    public bool IsKnown { get; set; }
+    public bool IsHidden { get; set; }
 }
