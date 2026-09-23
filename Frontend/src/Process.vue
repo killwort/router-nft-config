@@ -41,8 +41,8 @@ async function forbid(name) {
         <a href="#" @click.stop.prevent="forbid(exeName)">Запретить по имени файла</a>
         &nbsp;
         <a href="#" @click.stop.prevent="forbid(data.fullPath)">Запретить по полному пути</a>
-        <br/>
       </template>
+      <br/>
       {{ data.fullPath }}
       <br/>
       <Timeline :dates="data.hours"/>
