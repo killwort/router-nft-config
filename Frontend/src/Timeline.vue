@@ -1,5 +1,5 @@
 ﻿<script setup>
-import {computed} from 'vue';
+import { computed } from 'vue';
 
 const props = defineProps({
   dates: {
@@ -8,45 +8,113 @@ const props = defineProps({
   }
 });
 
-const HOUR = 60 * 60 * 1000;
+const hours = Array.from({ length: 24 }, (_, i) => i);
 
-const timeline = computed(() => {
+function dateKey(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+
+  return `${y}-${m}-${d}`;
+}
+
+function startOfDay(date) {
+  return new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate()
+  );
+}
+
+function addDays(date, days) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+const rows = computed(() => {
   if (!props.dates.length)
     return [];
 
+  /*
+   * Конвертируем входные ISO даты в локальные date/hour.
+   *
+   * Например:
+   * 2026-10-06T22:00:00Z
+   *
+   * в UTC+3 попадёт в:
+   * 2026-10-07, hour=1
+   */
+  const parsed = props.dates.map(x => new Date(x));
+
   const active = new Set(
-      props.dates.map(x => Math.floor(new Date(x).getTime() / HOUR))
+      parsed.map(date => `${dateKey(date)}:${date.getHours()}`)
   );
 
-  const min = Math.min(...active);
-  const max = Math.max(...active);
+  const minDate = startOfDay(
+      new Date(Math.min(...parsed.map(x => x.getTime())))
+  );
+
+  const maxDate = startOfDay(
+      new Date(Math.max(...parsed.map(x => x.getTime())))
+  );
 
   const result = [];
 
-  for (let hour = min; hour <= max; hour++) {
-    const isActive = active.has(hour);
+  for (
+      let day = minDate;
+      day <= maxDate;
+      day = addDays(day, 1)
+  ) {
+    const key = dateKey(day);
+
+    const cells = hours.map(hour => {
+      const isActive = active.has(`${key}:${hour}`);
+
+      const previousActive =
+          hour > 0 &&
+          active.has(`${key}:${hour - 1}`);
+
+      const nextActive =
+          hour < 23 &&
+          active.has(`${key}:${hour + 1}`);
+
+      const date = new Date(
+          day.getFullYear(),
+          day.getMonth(),
+          day.getDate(),
+          hour
+      );
+
+      return {
+        hour,
+        date,
+        active: isActive,
+
+        // Скругляем только край непрерывного участка
+        start: isActive && !previousActive,
+        end: isActive && !nextActive
+      };
+    });
 
     result.push({
-      hour,
-      active: isActive,
-      start: isActive && !active.has(hour - 1),
-      end: isActive && !active.has(hour + 1),
-      date: new Date(hour * HOUR)
+      key,
+      date: new Date(day),
+      cells
     });
   }
 
   return result;
 });
 
-const minDate = computed(() =>
-    timeline.value.length ? timeline.value[0].date : null
-);
+function formatDay(date) {
+  return date.toLocaleDateString(undefined, {
+    day: '2-digit',
+    month: '2-digit'
+  });
+}
 
-const maxDate = computed(() =>
-    timeline.value.length ? timeline.value.at(-1).date : null
-);
-
-function formatDate(date) {
+function formatDateTime(date) {
   return date.toLocaleString(undefined, {
     year: 'numeric',
     month: '2-digit',
@@ -58,70 +126,116 @@ function formatDate(date) {
 </script>
 
 <template>
-  <div v-if="timeline.length" :class="$style['timeline-wrapper']">
-    <span :class="$style['timeline-date']">
-      {{ formatDate(minDate) }}
-    </span>
+  <div v-if="rows.length" class="timeline">
+    <!-- header -->
+    <div class="day-header"></div>
 
-    <div :class="$style.timeline">
-      <div
-          v-for="item in timeline"
-          :key="item.hour"
-          :class="{
-            [$style['timeline-hour']]:true,
-          [$style.active]: item.active,
-          [$style.start]: item.start,
-          [$style.end]: item.end
-        }"
-          :title="formatDate(item.date)"
-      />
+    <div
+        v-for="hour in hours"
+        :key="hour"
+        class="hour-header"
+    >
+      {{ hour }}
     </div>
 
-    <span :class="$style['timeline-date']">
-      {{ formatDate(maxDate) }}
-    </span>
+    <!-- days -->
+    <template v-for="row in rows" :key="row.key">
+      <div
+          class="day-label"
+          :title="row.date.toLocaleDateString()"
+      >
+        {{ formatDay(row.date) }}
+      </div>
+
+      <div
+          v-for="cell in row.cells"
+          :key="cell.hour"
+          class="hour-cell"
+          :class="{
+          active: cell.active,
+          start: cell.start,
+          end: cell.end
+        }"
+          :title="formatDateTime(cell.date)"
+      />
+    </template>
   </div>
 </template>
 
-<style module>
-.timeline-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
+<style scoped>
 .timeline {
-  display: flex;
+  display: grid;
+
+  /*
+   * Первая колонка — дата,
+   * остальные 24 — часы.
+   */
+  grid-template-columns: max-content repeat(24, 10px);
+
   align-items: center;
+
+  column-gap: 0;
+  row-gap: 3px;
+
+  width: max-content;
 }
 
-.timeline-hour {
+/* Верхний левый угол */
+.day-header {
+  width: 52px;
+}
+
+/* 0..23 */
+.hour-header {
+  width: 10px;
+
+  font-size: 8px;
+  line-height: 10px;
+  text-align: center;
+
+  color: #777;
+
+  /*
+   * Цифры 10..23 шире клетки,
+   * разрешаем им выходить за её границы.
+   */
+  overflow: visible;
+  white-space: nowrap;
+}
+
+/* Дата слева */
+.day-label {
+  padding-right: 7px;
+
+  font-size: 11px;
+  line-height: 10px;
+
+  white-space: nowrap;
+  text-align: right;
+}
+
+/* Один час */
+.hour-cell {
   width: 10px;
   height: 10px;
+
   box-sizing: border-box;
-
-  border: 1px solid #ccc;
 }
 
-.timeline-hour.active {
+/* Активный час */
+.hour-cell.active {
   background: #1976d2;
-  border-color: #1976d2;
 }
 
-/* Левая сторона последовательности */
-.timeline-hour.active.start {
+/* Начало непрерывного участка */
+.hour-cell.active.start {
   border-top-left-radius: 4px;
   border-bottom-left-radius: 4px;
 }
 
-/* Правая сторона последовательности */
-.timeline-hour.active.end {
+/* Конец непрерывного участка */
+.hour-cell.active.end {
   border-top-right-radius: 4px;
   border-bottom-right-radius: 4px;
-}
-
-.timeline-date {
-  white-space: nowrap;
-  font-size: 12px;
 }
 </style>

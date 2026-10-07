@@ -8,10 +8,25 @@ namespace Controller;
 class Program
 {
     static HttpClient HttpClient = new();
-    private const string BaseUrl = "http://10.132.35.254/";
-    private const string WatchedFlag = "VasyaHomeworkCompleted";
+    private static string BaseUrl = "http://10.132.35.254/";
+    private static string WatchedFlag = "VasyaHomeworkCompleted";
     static async Task Main(string[] args)
     {
+        for (var i = 0; i < args.Length; i++)
+        {
+            switch (args[i])
+            {
+                case "--flag":
+                    WatchedFlag = args[++i];
+                    break;
+                case "--server":
+                    BaseUrl = args[++i];
+                    break;
+                default:
+                    Console.WriteLine($"Unknown argument {args[i]}");
+                    return;
+            }
+        }
         
         while (true)
         {
